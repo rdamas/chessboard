@@ -5,8 +5,7 @@
 # license: free
 #
 # TODO:
-# - Spielzeit/Schachuhr
-# - Rechenzeit/Schwierigkeitsgrad für gnuchess einstellen
+# - Spielzeit/Uhr als alternative zur Spielstärke
 # - Remis anbieten
 # - Info-Handler aus chess
 # - Absichern, dass gnuchess installiert ist
@@ -40,6 +39,8 @@ class Gnuchess(object):
 		self.engine.isready()
 		self.engine.ucinewgame()
 		
+		self.movetime = 1000
+		
 	def quit(self):
 		self.engine.terminate()
 	
@@ -55,8 +56,17 @@ class Gnuchess(object):
 		
 	def doMove(self, board):
 		self.engine.position(board)
-		future = self.engine.go(movetime=1000, async_callback=self.received)
-
+		future = self.engine.go(movetime=self.movetime, async_callback=self.received)
+	
+	def setMovetime(self, movetime):
+		try:
+			self.movetime = int(movetime)
+		except Exception:
+			pass
+	
+	def getMovetime(self):
+		return self.movetime
+	
 
 def argb(a,r,g,b):
 	return (a<<24)|(r<<16)|(g<<8)|b
@@ -84,9 +94,11 @@ class ChessBoard(chess.Board):
 		self.pieceColor = self.boardcolor["black"]
 		self.frameColor = self.boardcolor["black"]
 	
-	# Override, um Rochade und en passant anzeigen zu können
-	# Gleich das Board-Update zeichnen
 	def push_uci(self, uci):
+		"""
+		Überschriebt die Library-Methode, um Rochade und en passant korrekt
+		anzeigen zu können. Das Board jetzt neu zeichnen
+		"""
 		move = self.parse_uci(uci)
 		self._isCastling = self.is_castling(move)
 		self._isEnpassant = self.is_en_passant(move)
@@ -107,6 +119,9 @@ class ChessBoard(chess.Board):
 				self._drawSquare(square)
 
 	def updateBoard(self, move):
+		# Falls der letzt Zug eine Rochade oder En-Passant war,
+		# wird der Einfachheit halber das Board komplett neu
+		# gezeichnet. Ansonsten nur die beiden betroffenen Felder.
 		if self._isCastling or self._isEnpassant:
 			self.drawBoard()
 		else:
@@ -133,11 +148,13 @@ class ChessBoard(chess.Board):
 		else:
 			return self._getBackgroundColor(square)
 	
-	# Eine Zelle zeichnen:
-	# Für den Rahmen eine schwarze Zelle
-	# Darin eine etwas kleinere Zelle mit der Hintergrundfarbe
-	# Darin die Figur
 	def _drawSquare(self, square):
+		"""
+		Eine Zelle zeichnen
+		Für den Rahmen eine schwarze Zelle
+		Darin eine etwas kleinere Zelle mit der Hintergrundfarbe und Focus
+		Darin die Figur
+		"""
 		piece = self._getPieceAt(square)
 		x, y = self._getSquareCoord(square)
 		backgroundColor = self._getBackgroundColor(square)
@@ -172,7 +189,7 @@ class Board(Screen):
 			<widget source="Canvas" render="Canvas" position="50,140" size="800,800" />
 			<widget name="player_black" position="50,90" size="800,40" font="Regular;30" valign="center" />
 			<widget name="player_white" position="50,950" size="800,40" font="Regular;30" valign="center" />
-			<widget name="runtime" position="900,100" size="175,50" font="Regular;35"/>
+			<widget name="curr_move" position="900,100" size="250,50" font="Regular;35"/>
 			<widget name="hint" position="1150,100" size="500,50" font="Regular;35"/>
 			<widget name="message0" position="900,175" size="250,800" font="Regular;32"/>
 			<widget name="message1" position="1150,175" size="250,800" font="Regular;32"/>
@@ -191,21 +208,23 @@ class Board(Screen):
 		Screen.__init__(self, session)
 		
 		self["actions"] =  ActionMap(["ChessboardActions"], {
-			"cancel":	self.cancel,
-			"up":		self.moveUp,
-			"down":		self.moveDown,
-			"left":		self.moveLeft,
-			"right":	self.moveRight,
-			"ok":       self.selectSquare,
-			"red":		self.red,
-			"green":	self.green,
-			"yellow":	self.yellow,
-			"blue":		self.blue,
+			"cancel":	   self.cancel,
+			"up":		   self.moveUp,
+			"down":		   self.moveDown,
+			"left":		   self.moveLeft,
+			"right":	   self.moveRight,
+			"ok":          self.selectSquare,
+			"red":		   self.red,
+			"green":	   self.green,
+			"yellow":	   self.yellow,
+			"blue":		   self.blue,
+			"nextBouquet": self.increaseMovetime,
+			"prevBouquet": self.decreaseMovetime,
 		}, -1)
 		
 		self["Canvas"] = CanvasSource()
 		
-		self["runtime"] = Label()
+		self["curr_move"] = Label()
 		self["hint"] = Label()
 		
 		self["message0"] = Label()
@@ -223,7 +242,6 @@ class Board(Screen):
 		
 		self.gnuchess = Gnuchess(self.receiveAnswer)
 		self.move  = []
-		self.moves = []
 		
 		self.isWhite = True
 		self.isCheckMate = False
@@ -259,7 +277,7 @@ class Board(Screen):
 		
 		self.move.append(self.board.getFocus())
 		move_uci = self.getMoveUci()
-		self["runtime"].setText(move_uci)
+		self["curr_move"].setText(move_uci)
 		if len(self.move) == 2:
 			# wenn beide Felder ausgewählt sind, wird der Zug ausgeführt
 			move_uci = self.handlePromotion(move_uci)
@@ -273,19 +291,19 @@ class Board(Screen):
 		"""
 		try:
 			move = self.board.push_uci(move_uci)
-			self.moves.append(move_uci)
 			self.showMoves()
 			if self.board.is_checkmate():
-				self["runtime"].setText("Schach matt")
+				self["curr_move"].setText("Schach matt")
+				self["hint"].setText("Ausgang: "+self.board.result())
 				self.isCheckMate = True
 				return
 			elif self.board.is_check():
-				self["runtime"].setText("Schach")
+				self["curr_move"].setText("Schach")
 			self["hint"].setText("")
 			self.gnuchess.doMove(self.board)
 		except ValueError as e:
 			print e
-			self["runtime"].setText("Illegaler Zug")
+			self["curr_move"].setText("Illegaler Zug")
 		self.move = []
 	
 	def receiveAnswer(self, bestmove, ponder):
@@ -296,16 +314,16 @@ class Board(Screen):
 		angezeigt werden.
 		"""
 		self.ponderMove = ponder
-		self["runtime"].setText(bestmove)
+		self["curr_move"].setText(bestmove)
 		move = self.board.push_uci(bestmove)
-		self.moves.append(bestmove)
 		self.showMoves()
 		
 		if self.board.is_checkmate():
+			self["curr_move"].setText("Schach matt")
+			self["hint"].setText("Ausgang: "+self.board.result())
 			self.isCheckMate = True
-			self["runtime"].setText("Schach matt")
 		elif self.board.is_check():
-			self["runtime"].setText("Schach")
+			self["curr_move"].setText("Schach")
 	
 	def showMoves(self):
 		"""
@@ -313,15 +331,15 @@ class Board(Screen):
 		Es wird immer nur die letzte Spalte geschrieben.
 		"""
 		moves = ""
-		column = (len(self.moves) - 1) / 36
+		column = (len(self.board.move_stack) - 1) / 36
 		if column > 3:
 			column = 3
 		startpos = column * 36
-		for num, move in enumerate(self.moves[startpos:]):
+		for num, move in enumerate(self.board.move_stack[startpos:]):
 			if num % 2 == 0:
-				moves += "%d. %s " % ( (num + startpos) / 2 + 1, move )
+				moves += "%d. %s " % ( (num + startpos) / 2 + 1, move.uci() )
 			else:
-				moves += "%s\n" % move
+				moves += "%s\n" % move.uci()
 		label = "message%d" % column
 		self[label].setText(moves)
 	
@@ -349,7 +367,7 @@ class Board(Screen):
 	# Den Zug mit der ausgewählten umgewandelten Figur ausführen.
 	def promotionCallback(self, ret):
 		if ret is not None:
-			self["runtime"].setText("")
+			self["curr_move"].setText("")
 			move_uci = ret[1]
 			self.playerMove(move_uci)
 
@@ -358,6 +376,8 @@ class Board(Screen):
 	
 	# Gespeicherten Zug-Vorschlag anzeigen
 	def green(self):
+		if self.isCheckMate:
+			return
 		if self.ponderMove:
 			self["hint"].setText("Vorschlag: %s" % self.ponderMove)
 		else:
@@ -410,3 +430,18 @@ class Board(Screen):
 		if self.board.getFocus() % 8 < 7:
 			cellWithFocus = self.board.getFocus() + 1
 			self.board.setFocus(cellWithFocus)
+	
+	# Spielstärke / Bedenkzeit setzen
+	def increaseMovetime(self):
+		movetime = self.gnuchess.getMovetime()
+		if movetime < 10000:
+			movetime += 1000
+			self.gnuchess.setMovetime(movetime)
+			self["hint"].setText("Neue Bedenkzeit: %d Sekunden" % (movetime/1000) )
+	
+	def decreaseMovetime(self):
+		movetime = self.gnuchess.getMovetime()
+		if movetime > 1000:
+			movetime -= 1000
+			self.gnuchess.setMovetime(movetime)
+			self["hint"].setText("Neue Bedenkzeit: %d Sekunden" % (movetime/1000) )

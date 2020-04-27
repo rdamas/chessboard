@@ -15,18 +15,11 @@
         <key id="KEY_YELLOW" mapto="yellow" flags="m" />
         <key id="KEY_BLUE" mapto="blue" flags="m" />
         
-        <key id="KEY_CHANNELUP" mapto="nextBouquet" flags="mr" />
-        <key id="KEY_CHANNELDOWN" mapto="prevBouquet" flags="mr" />
-        <key id="KEY_PREVIOUS" mapto="prevMarker" flags="m" />
-        <key id="KEY_NEXT" mapto="nextMarker" flags="m" />
-        <key id="KEY_BACK" mapto="prevMarker" flags="m" />
-        <key id="KEY_FORWARD" mapto="nextMarker" flags="m" />
+        <key id="KEY_CHANNELUP" mapto="nextBouquet" flags="m" />
+        <key id="KEY_CHANNELDOWN" mapto="prevBouquet" flags="m" />
         
         <key id="KEY_MENU" mapto="menu" flags="mr" />
         <key id="KEY_INFO" mapto="eventview" flags="b" />
-        <key id="KEY_TEXT" mapto="startTeletext" flags="b" />
-        <key id="KEY_VIDEO" mapto="showMovies" flags="b" />
-        <key id="KEY_SUBTITLE" mapto="showSubtitle" flags="m" />
         
         <key id="KEY_1" mapto="1" flags="m" />
         <key id="KEY_2" mapto="2" flags="m" />
