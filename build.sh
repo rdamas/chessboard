@@ -8,6 +8,8 @@ cp -r ../src/* usr/lib/enigma2/python/Plugins/Extensions/ChessBoard
 tar -cvzf data.tar.gz usr
 tar -cvzf control.tar.gz control
 
+[ -d ../dist ] || mkdir ../dist
+
 rm -f ../dist/${package}_${version}_all.ipk
 ar -r ../dist/${package}_${version}_all.ipk debian-binary control.tar.gz data.tar.gz
 
