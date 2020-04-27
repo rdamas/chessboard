@@ -5,7 +5,6 @@
 # license: free
 #
 # TODO:
-# - eigene Bauern-Umwandlung (+) - evtl. als SelectList.
 # - Spielzeit/Schachuhr
 # - Rechenzeit/Schwierigkeitsgrad für gnuchess einstellen
 # - Remis anbieten
@@ -24,6 +23,7 @@ from Components.Label import Label
 from Components.Sources.CanvasSource import CanvasSource   
 from Components.Sources.StaticText import StaticText   
 from Screens.Screen import Screen
+from Screens.ChoiceBox import ChoiceBox
 
 import chess
 import chess.uci
@@ -83,7 +83,7 @@ class ChessBoard(chess.Board):
 		
 		self.pieceColor = self.boardcolor["black"]
 		self.frameColor = self.boardcolor["black"]
-
+	
 	# Override, um Rochade und en passant anzeigen zu können
 	# Gleich das Board-Update zeichnen
 	def push_uci(self, uci):
@@ -165,15 +165,19 @@ class Board(Screen):
 
 	skin = """
 		<screen name="ChessBoard" position="0,0" size="1920,1080" title="Chessboard" flags="wfNoBorder">
+			<panel name="back_top" />
+			<panel name="back_top_wide" />
+			<panel name="back_bottom_small" />
+			<panel name="part_Title" />
 			<widget source="Canvas" render="Canvas" position="50,140" size="800,800" />
 			<widget name="player_black" position="50,90" size="800,40" font="Regular;30" valign="center" />
 			<widget name="player_white" position="50,950" size="800,40" font="Regular;30" valign="center" />
-			<widget name="runtime" position="1000,100" size="175,50" font="Regular;35"/>
-			<widget name="hint" position="1250,100" size="500,50" font="Regular;35"/>
-			<widget name="message0" position="1000,175" size="250,800" font="Regular;32"/>
-			<widget name="message1" position="1250,175" size="250,800" font="Regular;32"/>
-			<widget name="message2" position="1500,175" size="250,800" font="Regular;32"/>
-			<widget name="message3" position="1750,175" size="250,800" font="Regular;32"/>
+			<widget name="runtime" position="900,100" size="175,50" font="Regular;35"/>
+			<widget name="hint" position="1150,100" size="500,50" font="Regular;35"/>
+			<widget name="message0" position="900,175" size="250,800" font="Regular;32"/>
+			<widget name="message1" position="1150,175" size="250,800" font="Regular;32"/>
+			<widget name="message2" position="1400,175" size="250,800" font="Regular;32"/>
+			<widget name="message3" position="1650,175" size="250,800" font="Regular;32"/>
 			<widget name="key_red" position="225,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#00b81c46" />
 			<widget name="key_green" position="565,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#10389416"  />
 			<widget name="key_yellow" position="905,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#109ca81b" />
@@ -192,7 +196,7 @@ class Board(Screen):
 			"down":		self.moveDown,
 			"left":		self.moveLeft,
 			"right":	self.moveRight,
-			"ok":       self.markCell,
+			"ok":       self.selectSquare,
 			"red":		self.red,
 			"green":	self.green,
 			"yellow":	self.yellow,
@@ -232,42 +236,65 @@ class Board(Screen):
 		self.board = ChessBoard(canvas=self["Canvas"])
 		self.board.drawBoard()
 
-	def getNotation(self):
-		notation = ""
+	def getMoveUci(self):
+		"""
+		Die beiden in self.move[] gespeicherten Felder in
+		UCI-Notation zurück geben
+		"""
+		uci = ""
 		for cell in self.move:
 			x = cell % 8
 			y = cell / 8
-			notation += chr(97+x) + chr(49+y)
-		return notation
+			uci += chr(97+x) + chr(49+y)
+		return uci
 
-	# mit dem ersten ok-Klick wird die Figur gemerkt,
-	# mit dem zweiten Klick gezogen
-	def markCell(self):
+	def selectSquare(self):
+		"""
+		Event-Handler für OK-Taste
+		Der erste Klick speichert das Feld, von dem gezogen wird
+		Der zweite Klick speichert das Feld, wohin gezogen wird
+		"""
 		if self.isCheckMate:
 			return
 		
 		self.move.append(self.board.getFocus())
-		self["runtime"].setText(self.getNotation())
+		move_uci = self.getMoveUci()
+		self["runtime"].setText(move_uci)
 		if len(self.move) == 2:
-			try:
-				data = self.getNotation()
-				move = self.board.push_uci(data)
-				self.moves.append(data)
-				self.showMoves()
-				if self.board.is_checkmate():
-					self["runtime"].setText("Schach matt")
-					self.isCheckMate = True
-					return
-				elif self.board.is_check():
-					self["runtime"].setText("Schach")
-				self["hint"].setText("")
-				self.gnuchess.doMove(self.board)
-			except ValueError:
-				self["runtime"].setText("Illegaler Zug")
-			self.move = []
+			# wenn beide Felder ausgewählt sind, wird der Zug ausgeführt
+			move_uci = self.handlePromotion(move_uci)
+			self.playerMove(move_uci)
+
+	def playerMove(self, move_uci):
+		"""
+		Zug des Spielers ausführen.
+		Ein illegaler Zug führt zu einer Exception, der Zug wird dann nicht
+		weiter ausgeführt
+		"""
+		try:
+			move = self.board.push_uci(move_uci)
+			self.moves.append(move_uci)
+			self.showMoves()
+			if self.board.is_checkmate():
+				self["runtime"].setText("Schach matt")
+				self.isCheckMate = True
+				return
+			elif self.board.is_check():
+				self["runtime"].setText("Schach")
+			self["hint"].setText("")
+			self.gnuchess.doMove(self.board)
+		except ValueError as e:
+			print e
+			self["runtime"].setText("Illegaler Zug")
+		self.move = []
 	
-	# Callback von Gnuchess
 	def receiveAnswer(self, bestmove, ponder):
+		"""
+		Callback mit einer Antwort von gnuchess.
+		Der UCI-Modus liefert immer einen "bestmove" und die erwartete Antwort.
+		Diese Antwort wird als "hint" gespeichert und kann über die grüne Taste
+		angezeigt werden.
+		"""
 		self.ponderMove = ponder
 		self["runtime"].setText(bestmove)
 		move = self.board.push_uci(bestmove)
@@ -280,11 +307,15 @@ class Board(Screen):
 		elif self.board.is_check():
 			self["runtime"].setText("Schach")
 	
-	# Liste der Züge in maximal drei Spalten anzeigen
-	# Es wird immer nur die letzte Spalte geschrieben
 	def showMoves(self):
+		"""
+		Die Liste der Züge kann in maximal vier Spalten angezeigt werden.
+		Es wird immer nur die letzte Spalte geschrieben.
+		"""
 		moves = ""
 		column = (len(self.moves) - 1) / 36
+		if column > 3:
+			column = 3
 		startpos = column * 36
 		for num, move in enumerate(self.moves[startpos:]):
 			if num % 2 == 0:
@@ -294,9 +325,38 @@ class Board(Screen):
 		label = "message%d" % column
 		self[label].setText(moves)
 	
+	def handlePromotion(self, move_uci):
+		"""
+		Überprüfen, ob eine Bauern-Umwandlung gemacht werden muss.
+		Wenn ja: eine Choice-Box mit den Umwandlungs-Möglichkeiten
+		anzeigen. Ein Zug ohne mögliche Umwandlung ist illegal.
+		Die korrekte Fortsetzung wird dann aus dem Callback durchgeführt.
+		"""
+		from_piece = self.board.piece_type_at(self.move[0])
+		to_piece = self.board.piece_type_at(self.move[1])
+		to_line = self.move[1] / 8
+		
+		if from_piece == 1 and to_piece is None and to_line in [0,7]:
+			options = [
+				("Dame",move_uci+"q"),
+				("Turm",move_uci+"r"),
+				("Springer",move_uci+"n"),
+				("Läufer",move_uci+"b"),
+			]
+			self.session.openWithCallback(self.promotionCallback, ChoiceBox,list = options)
+		return move_uci
+	
+	# Den Zug mit der ausgewählten umgewandelten Figur ausführen.
+	def promotionCallback(self, ret):
+		if ret is not None:
+			self["runtime"].setText("")
+			move_uci = ret[1]
+			self.playerMove(move_uci)
+
 	def red(self):
 		pass
 	
+	# Gespeicherten Zug-Vorschlag anzeigen
 	def green(self):
 		if self.ponderMove:
 			self["hint"].setText("Vorschlag: %s" % self.ponderMove)
@@ -306,15 +366,26 @@ class Board(Screen):
 	def yellow(self):
 		pass
 	
+	# Spieler-Seite wechseln
 	def blue(self):
-		if self.isWhite:
-			self.isWhite = False
-			self["player_black"].setText("Spieler")
-			self["player_white"].setText("Gnuchess")
-			self.board.setFocus(52)
+		try:
 			self.gnuchess.doMove(self.board)
-		pass
+			if self.isWhite:
+				self.isWhite = False
+				self["player_black"].setText("Spieler")
+				self["player_white"].setText("Gnuchess")
+				self["key_blue"].setText("Weiß spielen")
+				self.board.setFocus(52)
+			else:
+				self.isWhite = True
+				self["player_black"].setText("Gnuchess")
+				self["player_white"].setText("Spieler")
+				self["key_blue"].setText("Schwarz spielen")
+				self.board.setFocus(12)
+		except:
+			pass
 
+	# Plugin beenden, vorher Gnuchess beenden
 	def cancel(self):
 		self.gnuchess.quit()
 		self.close()
