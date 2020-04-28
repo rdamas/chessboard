@@ -2,16 +2,16 @@
 
 #
 # chess pieces font from https://github.com/xeyownt/chess_merida_unicode
-# license: free
+# licence: free
 #
 # TODO:
 # - Spielzeit/Uhr als Alternative zur Spielstärke
-# - Remis anbieten
-# - Info-Handler aus chess
+# - Remis anbieten (möglich?)
+# - Info-Handler aus python-chess
 # - Absichern, dass gnuchess installiert ist
 # - Absichern, dass python-chess installiert ist
 # - Ohne Computer spielen
-# - Stellung eingeben können
+# - Stellung eingeben
 # - Spiel abbrechen/resetten
 # - Spiel speichern, laden, fortsetzen
 # - Bedienung vereinfachen:
@@ -188,10 +188,6 @@ class Board(Screen):
 
 	skin = """
 		<screen name="ChessBoard" position="0,0" size="1920,1080" title="Chessboard" flags="wfNoBorder">
-			<panel name="back_top" />
-			<panel name="back_top_wide" />
-			<panel name="back_bottom_small" />
-			<panel name="part_Title" />
 			<widget source="Canvas" render="Canvas" position="50,140" size="800,800" />
 			<widget name="player_black" position="50,90" size="800,40" font="Regular;30" valign="center" />
 			<widget name="player_white" position="50,950" size="800,40" font="Regular;30" valign="center" />
