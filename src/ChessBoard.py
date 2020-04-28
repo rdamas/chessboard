@@ -5,7 +5,7 @@
 # license: free
 #
 # TODO:
-# - Spielzeit/Uhr als alternative zur Spielstärke
+# - Spielzeit/Uhr als Alternative zur Spielstärke
 # - Remis anbieten
 # - Info-Handler aus chess
 # - Absichern, dass gnuchess installiert ist
@@ -14,6 +14,9 @@
 # - Stellung eingeben können
 # - Spiel abbrechen/resetten
 # - Spiel speichern, laden, fortsetzen
+# - Bedienung vereinfachen:
+#   ausgewählte Figur nur auf erlaubten Bahnen bewegen
+#   dafür vielleicht auch die Zifferntasten benutzen
 #
 
 from enigma import gFont, RT_HALIGN_CENTER, RT_VALIGN_CENTER
@@ -42,7 +45,10 @@ class Gnuchess(object):
 		self.movetime = 1000
 		
 	def quit(self):
-		self.engine.terminate()
+		try:
+			self.engine.terminate()
+		except Exception:
+			pass
 	
 	def received(self, future):
 		result = future.result()
@@ -96,7 +102,7 @@ class ChessBoard(chess.Board):
 	
 	def push_uci(self, uci):
 		"""
-		Überschriebt die Library-Methode, um Rochade und en passant korrekt
+		Überschreibt die Library-Methode, um Rochade und en passant korrekt
 		anzeigen zu können. Das Board jetzt neu zeichnen
 		"""
 		move = self.parse_uci(uci)
@@ -189,12 +195,12 @@ class Board(Screen):
 			<widget source="Canvas" render="Canvas" position="50,140" size="800,800" />
 			<widget name="player_black" position="50,90" size="800,40" font="Regular;30" valign="center" />
 			<widget name="player_white" position="50,950" size="800,40" font="Regular;30" valign="center" />
-			<widget name="curr_move" position="900,100" size="250,50" font="Regular;35"/>
-			<widget name="hint" position="1150,100" size="500,50" font="Regular;35"/>
-			<widget name="message0" position="900,175" size="250,800" font="Regular;32"/>
-			<widget name="message1" position="1150,175" size="250,800" font="Regular;32"/>
-			<widget name="message2" position="1400,175" size="250,800" font="Regular;32"/>
-			<widget name="message3" position="1650,175" size="250,800" font="Regular;32"/>
+			<widget name="curr_move" position="880,100" size="250,50" font="Console;35"/>
+			<widget name="hint" position="1150,100" size="500,50" font="Console;35"/>
+			<widget name="message0" position="880,175" size="250,800" font="Console;30"/>
+			<widget name="message1" position="1145,175" size="250,800" font="Console;30"/>
+			<widget name="message2" position="1410,175" size="250,800" font="Console;30"/>
+			<widget name="message3" position="1675,175" size="250,800" font="Console;30"/>
 			<widget name="key_red" position="225,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#00b81c46" />
 			<widget name="key_green" position="565,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#10389416"  />
 			<widget name="key_yellow" position="905,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#109ca81b" />
@@ -232,7 +238,7 @@ class Board(Screen):
 		self["message2"] = Label()
 		self["message3"] = Label()
 		
-		self["key_red"] = Label("rot")
+		self["key_red"] = Label("Zug zurücknehmen")
 		self["key_green"] = Label("Zug vorschlagen")
 		self["key_yellow"] = Label("gelb")
 		self["key_blue"] = Label("Schwarz spielen")
@@ -244,7 +250,9 @@ class Board(Screen):
 		self.move  = []
 		
 		self.isWhite = True
-		self.isCheckMate = False
+		self.isGameOver = False
+		self.flagUndoMove = False
+		self.waitForGnuchess = False
 		self.ponderMove = None
 		
 		self.onLayoutFinish.append(self.setupBoard)
@@ -272,16 +280,18 @@ class Board(Screen):
 		Der erste Klick speichert das Feld, von dem gezogen wird
 		Der zweite Klick speichert das Feld, wohin gezogen wird
 		"""
-		if self.isCheckMate:
+		if self.isGameOver:
 			return
 		
 		self.move.append(self.board.getFocus())
 		move_uci = self.getMoveUci()
 		self["curr_move"].setText(move_uci)
 		if len(self.move) == 2:
-			# wenn beide Felder ausgewählt sind, wird der Zug ausgeführt
-			move_uci = self.handlePromotion(move_uci)
-			self.playerMove(move_uci)
+			# Wenn beide Felder ausgewählt sind, wird der Zug ausgeführt.
+			# Eine Bauern-Umwandlung muss gesondert behandelt werden
+			if not self.handlePromotion(move_uci):
+				self.playerMove(move_uci)
+			self.move = []
 
 	def playerMove(self, move_uci):
 		"""
@@ -290,21 +300,21 @@ class Board(Screen):
 		weiter ausgeführt
 		"""
 		try:
-			move = self.board.push_uci(move_uci)
+			self.board.push_uci(move_uci)
 			self.showMoves()
-			if self.board.is_checkmate():
-				self["curr_move"].setText("Schach matt")
+			if self.board.is_game_over(claim_draw=True):
+				self["curr_move"].setText("Spielende")
 				self["hint"].setText("Ausgang: "+self.board.result())
-				self.isCheckMate = True
+				self.isGameOver = True
 				return
 			elif self.board.is_check():
 				self["curr_move"].setText("Schach")
 			self["hint"].setText("")
 			self.gnuchess.doMove(self.board)
+			self.waitForGnuchess = True
 		except ValueError as e:
-			print e
+			# print e
 			self["curr_move"].setText("Illegaler Zug")
-		self.move = []
 	
 	def receiveAnswer(self, bestmove, ponder):
 		"""
@@ -313,15 +323,20 @@ class Board(Screen):
 		Diese Antwort wird als "hint" gespeichert und kann über die grüne Taste
 		angezeigt werden.
 		"""
+		self.waitForGnuchess = False
+		self.board.push_uci(bestmove)
+		if self.flagUndoMove:
+			self.undoMove()
+			return
+		
 		self.ponderMove = ponder
 		self["curr_move"].setText(bestmove)
-		move = self.board.push_uci(bestmove)
 		self.showMoves()
 		
-		if self.board.is_checkmate():
-			self["curr_move"].setText("Schach matt")
+		if self.board.is_game_over(claim_draw=True):
+			self["curr_move"].setText("Spielende")
 			self["hint"].setText("Ausgang: "+self.board.result())
-			self.isCheckMate = True
+			self.isGameOver = True
 		elif self.board.is_check():
 			self["curr_move"].setText("Schach")
 	
@@ -331,17 +346,22 @@ class Board(Screen):
 		Es wird immer nur die letzte Spalte geschrieben.
 		"""
 		moves = ""
-		column = (len(self.board.move_stack) - 1) / 36
-		if column > 3:
-			column = 3
-		startpos = column * 36
+		column = (len(self.board.move_stack) - 1) / 40
+		column = max(0,min(3,column))
+		startpos = column * 40
+		
 		for num, move in enumerate(self.board.move_stack[startpos:]):
 			if num % 2 == 0:
-				moves += "%d. %s " % ( (num + startpos) / 2 + 1, move.uci() )
+				moves += "%+2s. %s " % ( str((num + startpos) / 2 + 1), move.uci() )
 			else:
 				moves += "%s\n" % move.uci()
 		label = "message%d" % column
 		self[label].setText(moves)
+		# Falls der letzte Zug zurückgenommen wurde und der erste in der
+		# neuen Spalte war: auch nächste Spalte anzeigen.
+		if column < 3:
+			label = "message%d" % (column+1)
+			self[label].setText("")
 	
 	def handlePromotion(self, move_uci):
 		"""
@@ -350,19 +370,22 @@ class Board(Screen):
 		anzeigen. Ein Zug ohne mögliche Umwandlung ist illegal.
 		Die korrekte Fortsetzung wird dann aus dem Callback durchgeführt.
 		"""
-		from_piece = self.board.piece_type_at(self.move[0])
-		to_piece = self.board.piece_type_at(self.move[1])
-		to_line = self.move[1] / 8
+		from_piece = self.board.piece_type_at(self.move[0]) # == 1    -> Bauer
+		to_piece = self.board.piece_type_at(self.move[1])   # is None -> leer
+		to_line = self.move[1] / 8                          # == 0, 7 -> erste und letzte Reihe
 		
 		if from_piece == 1 and to_piece is None and to_line in [0,7]:
+			# Mögliche Varianten des Zuges mit Umwandlung:
 			options = [
-				("Dame",move_uci+"q"),
-				("Turm",move_uci+"r"),
-				("Springer",move_uci+"n"),
-				("Läufer",move_uci+"b"),
+				("Dame",     move_uci+"q"),
+				("Turm",     move_uci+"r"),
+				("Springer", move_uci+"n"),
+				("Läufer",   move_uci+"b"),
 			]
 			self.session.openWithCallback(self.promotionCallback, ChoiceBox,list = options)
-		return move_uci
+			return True
+		
+		return False
 	
 	# Den Zug mit der ausgewählten umgewandelten Figur ausführen.
 	def promotionCallback(self, ret):
@@ -370,13 +393,30 @@ class Board(Screen):
 			self["curr_move"].setText("")
 			move_uci = ret[1]
 			self.playerMove(move_uci)
+	
+	def undoMove(self):
+		self["hint"].setText("")
+		try:
+			self.board.pop()
+			self.board.pop()
+		except Exception:
+			pass
+		self.board.drawBoard()
+		self.showMoves()
+		self.flagUndoMove = False
+		self.isGameOver = False
 
 	def red(self):
+		if self.waitForGnuchess:
+			self["hint"].setText("Zug wird zurückgenommen")
+			self.flagUndoMove = True
+		else:
+			self.undoMove()
 		pass
 	
 	# Gespeicherten Zug-Vorschlag anzeigen
 	def green(self):
-		if self.isCheckMate:
+		if self.isGameOver:
 			return
 		if self.ponderMove:
 			self["hint"].setText("Vorschlag: %s" % self.ponderMove)
@@ -388,6 +428,8 @@ class Board(Screen):
 	
 	# Spieler-Seite wechseln
 	def blue(self):
+		if self.isGameOver:
+			return
 		try:
 			self.gnuchess.doMove(self.board)
 			if self.isWhite:
