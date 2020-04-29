@@ -1,5 +1,5 @@
 Package: enigma2-plugin-extensions-chessboard
-Version: 0.1-r0
+Version: 0.1-r1
 Description: Plugin um Gnu-Chess zu spielen
 Section: games
 Priority: optional

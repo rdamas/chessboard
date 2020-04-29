@@ -191,12 +191,12 @@ class Board(Screen):
 			<widget source="Canvas" render="Canvas" position="50,140" size="800,800" />
 			<widget name="player_black" position="50,90" size="800,40" font="Regular;30" valign="center" />
 			<widget name="player_white" position="50,950" size="800,40" font="Regular;30" valign="center" />
-			<widget name="curr_move" position="880,100" size="250,50" font="Console;35"/>
-			<widget name="hint" position="1150,100" size="500,50" font="Console;35"/>
-			<widget name="message0" position="880,175" size="250,800" font="Console;30"/>
-			<widget name="message1" position="1145,175" size="250,800" font="Console;30"/>
-			<widget name="message2" position="1410,175" size="250,800" font="Console;30"/>
-			<widget name="message3" position="1675,175" size="250,800" font="Console;30"/>
+			<widget name="curr_move" position="880,100" size="500,50" font="Console;35"/>
+			<widget name="hint" position="1400,100" size="500,50" font="Console;35"/>
+			<widget name="message0" position="860,175" size="260,800" font="Console;30"/>
+			<widget name="message1" position="1140,175" size="260,800" font="Console;30"/>
+			<widget name="message2" position="1400,175" size="260,800" font="Console;30"/>
+			<widget name="message3" position="1660,175" size="260,800" font="Console;30"/>
 			<widget name="key_red" position="225,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#00b81c46" />
 			<widget name="key_green" position="565,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#10389416"  />
 			<widget name="key_yellow" position="905,1015" size="280,55" zPosition="1" font="Regular; 23" halign="center" valign="center" foregroundColor="#00ffffff" backgroundColor="#109ca81b" />
@@ -208,6 +208,7 @@ class Board(Screen):
 		
 		self.session = session
 		Screen.__init__(self, session)
+		self.skinName = "ChessBoard"
 		
 		self["actions"] =  ActionMap(["ChessboardActions"], {
 			"cancel":	   self.cancel,
@@ -236,7 +237,7 @@ class Board(Screen):
 		
 		self["key_red"] = Label("Zug zurücknehmen")
 		self["key_green"] = Label("Zug vorschlagen")
-		self["key_yellow"] = Label("gelb")
+		self["key_yellow"] = Label()
 		self["key_blue"] = Label("Schwarz spielen")
 		
 		self["player_black"] = Label("Gnuchess")
@@ -309,7 +310,6 @@ class Board(Screen):
 			self.gnuchess.doMove(self.board)
 			self.waitForGnuchess = True
 		except ValueError as e:
-			# print e
 			self["curr_move"].setText("Illegaler Zug")
 	
 	def receiveAnswer(self, bestmove, ponder):
@@ -397,8 +397,11 @@ class Board(Screen):
 			self.board.pop()
 		except Exception:
 			pass
+		self["curr_move"].setText("")
+		self["hint"].setText("")
 		self.board.drawBoard()
 		self.showMoves()
+		self.ponderMove = None
 		self.flagUndoMove = False
 		self.isGameOver = False
 
@@ -408,7 +411,6 @@ class Board(Screen):
 			self.flagUndoMove = True
 		else:
 			self.undoMove()
-		pass
 	
 	# Gespeicherten Zug-Vorschlag anzeigen
 	def green(self):
@@ -417,7 +419,7 @@ class Board(Screen):
 		if self.ponderMove:
 			self["hint"].setText("Vorschlag: %s" % self.ponderMove)
 		else:
-			self["hint"].setText("Kein Vorschlag vorhanden")
+			self["hint"].setText("Kein Vorschlag")
 			
 	def yellow(self):
 		pass
@@ -428,6 +430,7 @@ class Board(Screen):
 			return
 		try:
 			self.gnuchess.doMove(self.board)
+			self["hint"].setText("")
 			if self.isWhite:
 				self.isWhite = False
 				self["player_black"].setText("Spieler")
