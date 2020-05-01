@@ -16,7 +16,6 @@
 # - Spiel speichern, laden, fortsetzen
 # - Bedienung vereinfachen:
 #   ausgewählte Figur nur auf erlaubten Bahnen bewegen
-#   dafür vielleicht auch die Zifferntasten benutzen
 #
 
 from enigma import gFont, RT_HALIGN_CENTER, RT_VALIGN_CENTER
@@ -91,14 +90,43 @@ class ChessBoard(chess.Board):
 	def __init__(self, fen=chess.STARTING_FEN, chess960=False, canvas=None):
 		chess.Board.__init__(self, fen=chess.STARTING_FEN, chess960=False)
 		self.canvas = canvas
-		
+
+		self.WhiteBottom = True
+		self.drawCoords()
+
 		self._focusSquare = 12
-		
 		self._isCastling = False
 		self._isEnpassant = False
 		
 		self.pieceColor = self.boardcolor["black"]
 		self.frameColor = self.boardcolor["black"]
+		
+	
+	def drawCoords(self):
+		if self.canvas:
+			self.canvas.fill(0, 0, 30, self.cellwidth*8+40, self.boardcolor["light"])
+			self.canvas.fill(00, 810, self.cellwidth*8+40, 30, self.boardcolor["light"])
+			for coord in range(1,9):
+				if self.WhiteBottom:
+					hchar = chr(96+coord)
+					vchar = chr(57-coord)
+				else:
+					hchar = chr(105-coord)
+					vchar = chr(48+coord)
+				offset = (coord-1) * self.cellwidth
+				self.canvas.writeText(0, offset, 30, self.cellwidth, 
+					self.boardcolor["black"], self.boardcolor["light"],
+					gFont("Regular", 24), vchar, 
+					RT_HALIGN_CENTER|RT_VALIGN_CENTER)
+				self.canvas.writeText(offset+40, 810, self.cellwidth, 30, 
+					self.boardcolor["black"], self.boardcolor["light"],
+					gFont("Regular", 24), hchar, 
+					RT_HALIGN_CENTER|RT_VALIGN_CENTER)
+	
+	def rotateBoard(self):
+		self.WhiteBottom = not self.WhiteBottom
+		self.drawCoords()
+		self.drawBoard()
 	
 	def push_uci(self, uci):
 		"""
@@ -137,7 +165,10 @@ class ChessBoard(chess.Board):
 	def _getSquareCoord(self, square):
 		x = square % 8   # x <- 0..7, => A..H
 		y = square / 8   # y <- 0..7, => 1..8
-		return (x * self.cellwidth, (7-y) * self.cellwidth)
+		if self.WhiteBottom:
+			return (x * self.cellwidth + 40, (7-y) * self.cellwidth)
+		else:
+			return ((7-x) * self.cellwidth + 40, y * self.cellwidth)
 	
 	def _getBackgroundColor(self, square):
 		x = square % 8
@@ -188,11 +219,11 @@ class Board(Screen):
 
 	skin = """
 		<screen name="ChessBoard" position="0,0" size="1920,1080" title="Chessboard" flags="wfNoBorder">
-			<widget source="Canvas" render="Canvas" position="50,140" size="800,800" />
-			<widget name="player_black" position="50,90" size="800,40" font="Regular;30" valign="center" />
-			<widget name="player_white" position="50,950" size="800,40" font="Regular;30" valign="center" />
-			<widget name="curr_move" position="880,100" size="500,50" font="Console;35"/>
-			<widget name="hint" position="1400,100" size="500,50" font="Console;35"/>
+			<widget source="Canvas" render="Canvas" position="20,140" size="840,840" />
+			<widget name="player_black" position="460,90" size="400,40" font="Regular;30" valign="center" halign="center" backgroundColor="#00000000" foregroundColor="#00ffffff" />
+			<widget name="player_white" position="60,90" size="400,40" font="Regular;30" valign="center" halign="center" backgroundColor="#00ffffff" foregroundColor="#00000000" />
+			<widget name="curr_move" position="880,100" size="350,50" font="Console;35"/>
+			<widget name="hint" position="1250,100" size="650,50" font="Console;35"/>
 			<widget name="message0" position="860,175" size="260,800" font="Console;30"/>
 			<widget name="message1" position="1140,175" size="260,800" font="Console;30"/>
 			<widget name="message2" position="1400,175" size="260,800" font="Console;30"/>
@@ -211,18 +242,27 @@ class Board(Screen):
 		self.skinName = "ChessBoard"
 		
 		self["actions"] =  ActionMap(["ChessboardActions"], {
-			"cancel":	   self.cancel,
-			"up":		   self.moveUp,
-			"down":		   self.moveDown,
-			"left":		   self.moveLeft,
-			"right":	   self.moveRight,
-			"ok":          self.selectSquare,
-			"red":		   self.red,
-			"green":	   self.green,
-			"yellow":	   self.yellow,
-			"blue":		   self.blue,
-			"nextBouquet": self.increaseMovetime,
-			"prevBouquet": self.decreaseMovetime,
+			"cancel":		self.cancel,
+			"up":			self.moveUp,
+			"down":			self.moveDown,
+			"left":			self.moveLeft,
+			"right":		self.moveRight,
+			"1":			self.moveUpLeft,
+			"2":			self.moveUp,
+			"3":			self.moveUpRight,
+			"4":			self.moveLeft,
+			"5":			self.selectSquare,
+			"6":			self.moveRight,
+			"7":			self.moveDownLeft,
+			"8":			self.moveDown,
+			"9":			self.moveDownRight,
+			"ok":			self.selectSquare,
+			"red":			self.red,
+			"green":		self.green,
+			"yellow":		self.yellow,
+			"blue":			self.blue,
+			"nextBouquet":	self.increaseMovetime,
+			"prevBouquet":	self.decreaseMovetime,
 		}, -1)
 		
 		self["Canvas"] = CanvasSource()
@@ -237,7 +277,7 @@ class Board(Screen):
 		
 		self["key_red"] = Label("Zug zurücknehmen")
 		self["key_green"] = Label("Zug vorschlagen")
-		self["key_yellow"] = Label()
+		self["key_yellow"] = Label("Brett drehen")
 		self["key_blue"] = Label("Schwarz spielen")
 		
 		self["player_black"] = Label("Gnuchess")
@@ -251,11 +291,12 @@ class Board(Screen):
 		self.flagUndoMove = False
 		self.waitForGnuchess = False
 		self.ponderMove = None
+		self.whiteBottom = True
 		
 		self.onLayoutFinish.append(self.setupBoard)
 		
 	def setupBoard(self):
-		self["Canvas"].fill(0,0,800,800, argb(33,255,255,255))
+		self["Canvas"].fill(0,0,840,840, argb(33,255,255,255))
 		self.board = ChessBoard(canvas=self["Canvas"])
 		self.board.drawBoard()
 
@@ -419,10 +460,11 @@ class Board(Screen):
 		if self.ponderMove:
 			self["hint"].setText("Vorschlag: %s" % self.ponderMove)
 		else:
-			self["hint"].setText("Kein Vorschlag")
+			self["hint"].setText("Kein Vorschlag vorhanden")
 			
 	def yellow(self):
-		pass
+		self.whiteBottom = not self.whiteBottom
+		self.board.rotateBoard()
 	
 	# Spieler-Seite wechseln
 	def blue(self):
@@ -451,27 +493,105 @@ class Board(Screen):
 		self.gnuchess.quit()
 		self.close()
 	
-	# Focus-Feld bewegen
-	def moveDown(self):
-		cellWithFocus = self.board.getFocus() - 8
-		if cellWithFocus >= 0:
-			self.board.setFocus(cellWithFocus)
-			
+	# ---- Logische Feld-Bewegung ---- #
 	def moveUp(self):
+		if self.whiteBottom:
+			self.realMoveUp()
+		else:
+			self.realMoveDown()
+
+	def moveUpLeft(self):
+		if self.whiteBottom:
+			self.realMoveUpLeft()
+		else:
+			self.realMoveDownRight()
+
+	def moveUpRight(self):
+		if self.whiteBottom:
+			self.realMoveUpRight()
+		else:
+			self.realMoveDownLeft()
+
+	def moveLeft(self):
+		if self.whiteBottom:
+			self.realMoveLeft()
+		else:
+			self.realMoveRight()
+
+	def moveRight(self):
+		if self.whiteBottom:
+			self.realMoveRight()
+		else:
+			self.realMoveLeft()
+
+	def moveDown(self):
+		if self.whiteBottom:
+			self.realMoveDown()
+		else:
+			self.realMoveUp()
+
+	def moveDownLeft(self):
+		if self.whiteBottom:
+			self.realMoveDownLeft()
+		else:
+			self.realMoveUpRight()
+	
+	def moveDownRight(self):
+		if self.whiteBottom:
+			self.realMoveDownRight()
+		else:
+			self.realMoveUpLeft()
+
+	# ---- umgesetzt je nachdem ob Weiß oder Schwarz oben ist ---- #
+	# Focus-Feld bewegen
+	def realMoveUp(self):
 		cellWithFocus = self.board.getFocus() + 8
 		if cellWithFocus < 64:
 			self.board.setFocus(cellWithFocus)
-			
-	def moveLeft(self):
+
+	def realMoveUpLeft(self):
+		cellWithFocus = self.board.getFocus()
+		if cellWithFocus % 8 > 0:
+			cellWithFocus += 7
+			if cellWithFocus < 64:
+				self.board.setFocus(cellWithFocus)
+
+	def realMoveUpRight(self):
+		cellWithFocus = self.board.getFocus()
+		if cellWithFocus % 8 < 7:
+			cellWithFocus += 9
+			if cellWithFocus < 64:
+				self.board.setFocus(cellWithFocus)
+
+	def realMoveLeft(self):
 		if self.board.getFocus() % 8 > 0:
 			cellWithFocus = self.board.getFocus() - 1
 			self.board.setFocus(cellWithFocus)
-			
-	def moveRight(self):
+
+	def realMoveRight(self):
 		if self.board.getFocus() % 8 < 7:
 			cellWithFocus = self.board.getFocus() + 1
 			self.board.setFocus(cellWithFocus)
+
+	def realMoveDown(self):
+		cellWithFocus = self.board.getFocus() - 8
+		if cellWithFocus >= 0:
+			self.board.setFocus(cellWithFocus)
+
+	def realMoveDownLeft(self):
+		cellWithFocus = self.board.getFocus()
+		if cellWithFocus % 8 > 0:
+			cellWithFocus -= 9
+			if cellWithFocus >= 0:
+				self.board.setFocus(cellWithFocus)
 	
+	def realMoveDownRight(self):
+		cellWithFocus = self.board.getFocus()
+		if self.board.getFocus() % 8 < 7:
+			cellWithFocus -= 7
+			if cellWithFocus >= 0:
+				self.board.setFocus(cellWithFocus)
+
 	# Spielstärke / Bedenkzeit setzen
 	def increaseMovetime(self):
 		movetime = self.gnuchess.getMovetime()
