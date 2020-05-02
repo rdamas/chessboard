@@ -27,6 +27,7 @@
 
 from Plugins.Plugin import PluginDescriptor
 from Tools.Directories import resolveFilename, SCOPE_PLUGINS, SCOPE_LANGUAGE
+from __init__ import _, isDebug
 import ChessBoard
 
 from enigma import addFont
@@ -34,11 +35,19 @@ from enigma import addFont
 addFont(resolveFilename(SCOPE_PLUGINS, "Extensions/ChessBoard/font/") + "chess_merida_unicode.ttf", "chess", 100, False)
 
 def main(session, **kwargs):
-	session.open(ChessBoard.Board)
+	if isDebug():
+		reload(ChessBoard)
+		try:
+			session.open(ChessBoard.Board)
+		except:
+			import traceback
+			traceback.print_exc()
+	else:
+		session.open(ChessBoard.Board)
 
 def Plugins(**kwargs):
 	return PluginDescriptor(
 		name="ChessBoard", 
-		description="Gnuchess Frontend",
+		description=_("Gnuchess Frontend"),
 		where = PluginDescriptor.WHERE_PLUGINMENU, 
 		fnc=main)

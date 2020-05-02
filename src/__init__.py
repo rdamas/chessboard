@@ -20,5 +20,12 @@ def _(txt):
 		t = gettext.gettext(txt)
 	return t
 
+def isDebug():
+	try:
+		return isDebug.mode
+	except:
+		isDebug.mode = os.path.exists(resolveFilename(SCOPE_PLUGINS, "Extensions/ChessBoard/.debug"))
+		return isDebug.mode
+
 localeInit()
 language.addCallback(localeInit)
