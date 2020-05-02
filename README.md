@@ -7,6 +7,8 @@ This plugin is a frontend to let you play a game of chess against your Enigma2 b
 * gnuchess-6 (https://www.gnu.org/software/chess/)
 * python-chess-0.23.11 (last supported version for python-2, https://github.com/niklasf/python-chess/releases/tag/v0.23.11)
 
+![image](https://user-images.githubusercontent.com/15088943/80862960-3e289580-8c79-11ea-97f3-9ce8b053700f.png)
+
 ## Operation
 * move the focus field with the arrow keys or number keys
 * mark a piece with the ok key or number "5" key
