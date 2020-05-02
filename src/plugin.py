@@ -26,13 +26,8 @@
 #######################################################################M
 
 from Plugins.Plugin import PluginDescriptor
-from Tools.Directories import resolveFilename, SCOPE_PLUGINS, SCOPE_LANGUAGE
 from __init__ import _, isDebug
 import ChessBoard
-
-from enigma import addFont
-
-addFont(resolveFilename(SCOPE_PLUGINS, "Extensions/ChessBoard/font/") + "chess_merida_unicode.ttf", "chess", 100, False)
 
 def main(session, **kwargs):
 	if isDebug():

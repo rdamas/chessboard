@@ -7,6 +7,7 @@ from Components.Sources.CanvasSource import CanvasSource
 from Components.Sources.StaticText import StaticText   
 from Screens.Screen import Screen
 from Screens.ChoiceBox import ChoiceBox
+from __init__ import _
 
 import chess
 import chess.uci

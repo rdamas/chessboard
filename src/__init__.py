@@ -2,6 +2,7 @@
 
 from Components.Language import language
 from Tools.Directories import resolveFilename, SCOPE_PLUGINS
+from enigma import addFont
 import os, gettext
 
 PluginLanguageDomain = "ChessBoard"
@@ -29,3 +30,5 @@ def isDebug():
 
 localeInit()
 language.addCallback(localeInit)
+
+addFont(resolveFilename(SCOPE_PLUGINS, "Extensions/ChessBoard/font/") + "chess_merida_unicode.ttf", "chess", 100, False)
