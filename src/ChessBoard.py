@@ -1,23 +1,5 @@
 # -*- coding: utf-8 -*-
 
-#
-# chess pieces font from https://github.com/xeyownt/chess_merida_unicode
-# licence: free
-#
-# TODO:
-# - Spielzeit/Uhr als Alternative zur Spielstärke
-# - Remis anbieten (möglich?)
-# - Info-Handler aus python-chess
-# - Absichern, dass gnuchess installiert ist
-# - Absichern, dass python-chess installiert ist
-# - Ohne Computer spielen
-# - Stellung eingeben
-# - Spiel abbrechen/resetten
-# - Spiel speichern, laden, fortsetzen
-# - Bedienung vereinfachen:
-#   ausgewählte Figur nur auf erlaubten Bahnen bewegen
-#
-
 from enigma import gFont, RT_HALIGN_CENTER, RT_VALIGN_CENTER
 from Components.ActionMap import ActionMap
 from Components.Label import Label
@@ -105,20 +87,20 @@ class ChessBoard(chess.Board):
 	def drawCoords(self):
 		if self.canvas:
 			self.canvas.fill(0, 0, 30, self.cellwidth*8+40, self.boardcolor["light"])
-			self.canvas.fill(0, 810, self.cellwidth*8+40, 30, self.boardcolor["light"])
+			self.canvas.fill(0, self.cellwidth*8+10, self.cellwidth*8+40, 30, self.boardcolor["light"])
 			for coord in range(1,9):
 				if self.WhiteBottom:
-					hchar = chr(96+coord)
-					vchar = chr(57-coord)
+					hchar = chr(96+coord)  # "a" .. "h"
+					vchar = chr(57-coord)  # "8" .. "1"
 				else:
-					hchar = chr(105-coord)
-					vchar = chr(48+coord)
+					hchar = chr(105-coord) # "h" .. "a"
+					vchar = chr(48+coord)  # "1" .. "8"
 				offset = (coord-1) * self.cellwidth
 				self.canvas.writeText(0, offset, 30, self.cellwidth, 
 					self.boardcolor["black"], self.boardcolor["light"],
 					gFont("Regular", 24), vchar, 
 					RT_HALIGN_CENTER|RT_VALIGN_CENTER)
-				self.canvas.writeText(offset+40, 810, self.cellwidth, 30, 
+				self.canvas.writeText(offset+40, self.cellwidth*8+10, self.cellwidth, 30, 
 					self.boardcolor["black"], self.boardcolor["light"],
 					gFont("Regular", 24), hchar, 
 					RT_HALIGN_CENTER|RT_VALIGN_CENTER)
@@ -130,8 +112,8 @@ class ChessBoard(chess.Board):
 	
 	def push_uci(self, uci):
 		"""
-		Überschreibt die Library-Methode, um Rochade und en passant korrekt
-		anzeigen zu können. Das Board jetzt neu zeichnen
+		overrides library method in order to correctly display castling
+		and en passant moves on the board. Redraw board now.
 		"""
 		move = self.parse_uci(uci)
 		self.isCastling = self.is_castling(move)
@@ -153,9 +135,9 @@ class ChessBoard(chess.Board):
 				self._drawSquare(square)
 
 	def updateBoard(self, move):
-		# Falls der letzt Zug eine Rochade oder En-Passant war,
-		# wird der Einfachheit halber das Board komplett neu
-		# gezeichnet. Ansonsten nur die beiden betroffenen Felder.
+		# if the last move was a castling or en passant move,
+		# simply redraw the whole board instead of the fields
+		# changed
 		if self.isCastling or self.isEnpassant:
 			self.drawBoard()
 		else:
@@ -187,10 +169,10 @@ class ChessBoard(chess.Board):
 	
 	def _drawSquare(self, square):
 		"""
-		Eine Zelle zeichnen
-		Für den Rahmen eine schwarze Zelle
-		Darin eine etwas kleinere Zelle mit der Hintergrundfarbe und Focus
-		Darin die Figur
+		Draw a cell.
+		For the frame draw a cell with black background
+		Draw a tiny bit smaller cells with focus and background color onto that
+		Last draw the piece using the chess font
 		"""
 		piece = self._getPieceAt(square)
 		x, y = self._getSquareCoord(square)
@@ -281,13 +263,13 @@ class Board(Screen):
 		self["message2"] = Label()
 		self["message3"] = Label()
 		
-		self["key_red"] = Label("Zug zurücknehmen")
-		self["key_green"] = Label("Zug vorschlagen")
-		self["key_yellow"] = Label("Brett drehen")
-		self["key_blue"] = Label("Schwarz spielen")
+		self["key_red"] = Label(_("Undo move"))
+		self["key_green"] = Label(_("Suggest move"))
+		self["key_yellow"] = Label(_("Rotate board"))
+		self["key_blue"] = Label(_("Play black"))
 		
-		self["player_black"] = Label("Gnuchess")
-		self["player_white"] = Label("Spieler")
+		self["player_black"] = Label(_("Gnuchess"))
+		self["player_white"] = Label(_("Player"))
 		
 		self.gnuchess = Gnuchess(self.receiveAnswer)
 		self.move  = []
@@ -308,8 +290,7 @@ class Board(Screen):
 
 	def getMoveUci(self):
 		"""
-		Die beiden in self.move[] gespeicherten Felder in
-		UCI-Notation zurück geben
+		Return the two saved moves from self.move[] to UCI notation
 		"""
 		uci = ""
 		for cell in self.move:
@@ -320,9 +301,9 @@ class Board(Screen):
 
 	def selectSquare(self):
 		"""
-		Event-Handler für OK-Taste
-		Der erste Klick speichert das Feld, von dem gezogen wird
-		Der zweite Klick speichert das Feld, wohin gezogen wird
+		Event handler for OK key
+		The first press saves the field from which to move,
+		the second press saves the field where to move.
 		"""
 		if self.isGameOver:
 			return
@@ -331,40 +312,39 @@ class Board(Screen):
 		move_uci = self.getMoveUci()
 		self["curr_move"].setText(move_uci)
 		if len(self.move) == 2:
-			# Wenn beide Felder ausgewählt sind, wird der Zug ausgeführt.
-			# Eine Bauern-Umwandlung muss gesondert behandelt werden
+			# If self.move contains two fields, make the move.
+			# A promotion needs be handled separately
 			if not self.handlePromotion(move_uci):
 				self.playerMove(move_uci)
 			self.move = []
 
 	def playerMove(self, move_uci):
 		"""
-		Zug des Spielers ausführen.
-		Ein illegaler Zug führt zu einer Exception, der Zug wird dann nicht
-		weiter ausgeführt
+		Make the players move.
+		Illegal moves raise an exception, such moves will be aborted.
 		"""
 		try:
 			self.board.push_uci(move_uci)
 			self.showMoves()
 			if self.board.is_game_over(claim_draw=True):
-				self["curr_move"].setText("Spielende")
-				self["hint"].setText("Ausgang: "+self.board.result())
+				self["curr_move"].setText(_("Game over"))
+				self["hint"].setText(_("Result: ")+self.board.result())
 				self.isGameOver = True
 				return
 			elif self.board.is_check():
-				self["curr_move"].setText("Schach")
+				self["curr_move"].setText(_("Chess"))
 			self["hint"].setText("")
 			self.gnuchess.doMove(self.board)
 			self.waitForGnuchess = True
 		except ValueError as e:
-			self["curr_move"].setText("Illegaler Zug")
+			self["curr_move"].setText(_("illegal move"))
 	
 	def receiveAnswer(self, bestmove, ponder):
 		"""
-		Callback mit einer Antwort von gnuchess.
-		Der UCI-Modus liefert immer einen "bestmove" und die erwartete Antwort.
-		Diese Antwort wird als "hint" gespeichert und kann über die grüne Taste
-		angezeigt werden.
+		Callback with answer from gnuchess.
+		In UCI mode gnuchess returns a "bestmove" and a "ponder", which is the
+		move gnuchess regards as best answer. This move is saved as "hint" and
+		can be displayed by pressing the green key.
 		"""
 		self.waitForGnuchess = False
 		self.board.push_uci(bestmove)
@@ -377,16 +357,16 @@ class Board(Screen):
 		self.showMoves()
 		
 		if self.board.is_game_over(claim_draw=True):
-			self["curr_move"].setText("Spielende")
-			self["hint"].setText("Ausgang: "+self.board.result())
+			self["curr_move"].setText(_("Game over"))
+			self["hint"].setText(_("Result: ")+self.board.result())
 			self.isGameOver = True
 		elif self.board.is_check():
-			self["curr_move"].setText("Schach")
+			self["curr_move"].setText(_("Chess"))
 	
 	def showMoves(self):
 		"""
-		Die Liste der Züge kann in maximal vier Spalten angezeigt werden.
-		Es wird immer nur die letzte Spalte geschrieben.
+		The list of moves can be displayed in maximum 4 columns.
+		Always only write the last column...
 		"""
 		moves = ""
 		column = (len(self.board.move_stack) - 1) / 40
@@ -400,37 +380,38 @@ class Board(Screen):
 				moves += "%s\n" % move.uci()
 		label = "message%d" % column
 		self[label].setText(moves)
-		# Falls der letzte Zug zurückgenommen wurde und der erste in der
-		# neuen Spalte war: auch nächste Spalte anzeigen.
+		# ... except the last move was undone. In that case the second last column
+		# needs to be displayed as well
 		if column < 3:
 			label = "message%d" % (column+1)
 			self[label].setText("")
 	
 	def handlePromotion(self, move_uci):
 		"""
-		Überprüfen, ob eine Bauern-Umwandlung gemacht werden muss.
-		Wenn ja: eine Choice-Box mit den Umwandlungs-Möglichkeiten
-		anzeigen. Ein Zug ohne mögliche Umwandlung ist illegal.
-		Die korrekte Fortsetzung wird dann aus dem Callback durchgeführt.
+		Check whether the last move was a promotion.
+		If so, show a choice box to select the promotion.
+		The move then will be continued from the callback, the return
+		from this function will lead to an illegal move, that will
+		be ignored
 		"""
-		from_piece = self.board.piece_type_at(self.move[0]) # == 1    -> Bauer
-		to_piece = self.board.piece_type_at(self.move[1])   # is None -> leer
-		to_line = self.move[1] / 8                          # == 0, 7 -> erste und letzte Reihe
+		from_piece = self.board.piece_type_at(self.move[0]) # == 1    -> piece is a pawn
+		to_piece = self.board.piece_type_at(self.move[1])   # is None -> target empty
+		to_line = self.move[1] / 8                          # == 0, 7 -> and first or last row of board
 		
 		if from_piece == 1 and to_piece is None and to_line in [0,7]:
-			# Mögliche Varianten des Zuges mit Umwandlung:
+			# list with possible promotions to choose from
 			options = [
-				("Dame",     move_uci+"q"),
-				("Turm",     move_uci+"r"),
-				("Springer", move_uci+"n"),
-				("Läufer",   move_uci+"b"),
+				(_("Queen"),  move_uci+"q"),
+				(_("Rock"),   move_uci+"r"),
+				(_("Knight"), move_uci+"n"),
+				(_("Bishop"), move_uci+"b"),
 			]
 			self.session.openWithCallback(self.promotionCallback, ChoiceBox,list = options)
 			return True
 		
 		return False
 	
-	# Den Zug mit der ausgewählten umgewandelten Figur ausführen.
+	# Continue the promotion move
 	def promotionCallback(self, ret):
 		if ret is not None:
 			self["curr_move"].setText("")
@@ -454,25 +435,25 @@ class Board(Screen):
 
 	def red(self):
 		if self.waitForGnuchess:
-			self["hint"].setText("Zug wird zurückgenommen")
+			self["hint"].setText(_("Move will be undone"))
 			self.flagUndoMove = True
 		else:
 			self.undoMove()
 	
-	# Gespeicherten Zug-Vorschlag anzeigen
+	# if we have a move suggestion, display it
 	def green(self):
 		if self.isGameOver:
 			return
 		if self.ponderMove:
-			self["hint"].setText("Vorschlag: %s" % self.ponderMove)
+			self["hint"].setText(_("Sugguested move: %s") % self.ponderMove)
 		else:
-			self["hint"].setText("Kein Vorschlag vorhanden")
+			self["hint"].setText(_("No move suggestion"))
 			
 	def yellow(self):
 		self.whiteBottom = not self.whiteBottom
 		self.board.rotateBoard()
 	
-	# Spieler-Seite wechseln
+	# switch players color
 	def blue(self):
 		if self.isGameOver:
 			return
@@ -481,30 +462,29 @@ class Board(Screen):
 			self["hint"].setText("")
 			if self.isWhite:
 				self.isWhite = False
-				self["player_black"].setText("Spieler")
-				self["player_white"].setText("Gnuchess")
-				self["key_blue"].setText("Weiß spielen")
+				self["player_black"].setText(_("Player"))
+				self["player_white"].setText(_("Gnuchess"))
+				self["key_blue"].setText(_("Play white"))
 				self.board.setFocus(52)
 			else:
 				self.isWhite = True
-				self["player_black"].setText("Gnuchess")
-				self["player_white"].setText("Spieler")
-				self["key_blue"].setText("Schwarz spielen")
+				self["player_black"].setText(_("Gnuchess"))
+				self["player_white"].setText(_("Player"))
+				self["key_blue"].setText(_("Play black"))
 				self.board.setFocus(12)
 		except:
 			pass
 
-	# Plugin beenden, vorher Gnuchess beenden
+	# before closing the plugin, gnuchess needs to be terminated
 	def cancel(self):
 		self.gnuchess.quit()
 		self.close()
 
-	# An dieser Stelle auswerten, wohin das Focus-Feld verschoben werden soll.
-	# Spart so ca. 70 Zeilen Code.
+	# move the focus field
 	def moveFocus(self):
 		key = self["actions"].keyPressed
 		
-		# Map, welche Taste das Focus-Feld wohin verschiebt.
+		# map with move distance for key
 		movesWhite = { "1":  7,             "2":  8, "up":    8, "3": 9,
 					   "4": -1, "left": -1,                      "right": 1, "6": 1,
 					   "7": -9,             "8": -8, "down": -8, "9": -7 }
@@ -520,8 +500,8 @@ class Board(Screen):
 			dist = movesBlack[key]
 			fNew += dist
 		
-		# Sicherstellen, dass nicht über den Brettrand bewegt werden kann.
-		# "mod" ist der Zeilen-Abstand zwischen altem und neuem Feld.
+		# we won't move across the board margin,
+		# "mod" is the allowed distance between columns
 		if abs(dist) > 1:
 			mod = (lambda x: (1, -1)[x<0])(dist)
 		else:
@@ -530,17 +510,17 @@ class Board(Screen):
 		if fNew >= 0 and fNew <= 63 and  fOld / 8 + mod == fNew / 8:
 			self.board.setFocus(fNew)
 
-	# Spielstärke / Bedenkzeit setzen
+	# change time gnuchess is allowed to compute its next move
 	def increaseMovetime(self):
 		movetime = self.gnuchess.getMovetime()
 		if movetime < 10000:
 			movetime += 1000
 			self.gnuchess.setMovetime(movetime)
-			self["hint"].setText("Neue Bedenkzeit: %d Sekunden" % (movetime/1000) )
+			self["hint"].setText(_("New movetime: %d seconds") % (movetime/1000) )
 	
 	def decreaseMovetime(self):
 		movetime = self.gnuchess.getMovetime()
 		if movetime > 1000:
 			movetime -= 1000
 			self.gnuchess.setMovetime(movetime)
-			self["hint"].setText("Neue Bedenkzeit: %d Sekunden" % (movetime/1000) )
+			self["hint"].setText(_("New movetime: %d seconds") % (movetime/1000) )
