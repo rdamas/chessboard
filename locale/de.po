@@ -5,8 +5,8 @@
 #, fuzzy
 msgid ""
 msgstr ""
-"Project-Id-Version: enigma2-plugin-extensions-chessboard 0.2-r0\n"
-"Report-Msgid-Bugs-To: \n"
+"Project-Id-Version: enigma2-plugin-extensions-chessboard\n"
+"Report-Msgid-Bugs-To: https://github.com/rdamas/chessboard/issues\n"
 "POT-Creation-Date: 2020-05-02 12:04+0200\n"
 "PO-Revision-Date: YEAR-MO-DA HO:MI+ZONE\n"
 "Last-Translator: FULL NAME <EMAIL@ADDRESS>\n"
@@ -93,3 +93,8 @@ msgstr "Weiß spielen"
 #, python-format
 msgid "New movetime: %d seconds"
 msgstr "Neue Bedenkzeit: %d Sekunden"
+
+#: plugin.py
+#, python-format
+msgid "Gnuchess Frontend"
+msgstr "Gnuchess Frontend"
