@@ -250,8 +250,8 @@ class Board(Screen):
 			"green":		self.green,
 			"yellow":		self.yellow,
 			"blue":			self.blue,
-			"nextBouquet":	self.increaseMovetime,
-			"prevBouquet":	self.decreaseMovetime,
+			"nextBouquet":	self.changeMovetime,
+			"prevBouquet":	self.changeMovetime,
 		}, -1)
 		
 		self["Canvas"] = CanvasSource()
@@ -512,16 +512,10 @@ class Board(Screen):
 			self.board.setFocus(fNew)
 
 	# change time gnuchess is allowed to compute its next move
-	def increaseMovetime(self):
-		movetime = self.gnuchess.getMovetime()
-		if movetime < 10000:
-			movetime += 1000
-			self.gnuchess.setMovetime(movetime)
-			self["hint"].setText(_("New movetime: %d seconds") % (movetime/1000) )
-	
-	def decreaseMovetime(self):
-		movetime = self.gnuchess.getMovetime()
-		if movetime > 1000:
-			movetime -= 1000
+	def changeMovetime(self):
+		key = self["actions"].keyPressed
+		amount = { "nextBouquet": 1000, "prevBouquet": -1000 }[key]
+		movetime = self.gnuchess.getMovetime() + amount
+		if 1000 <= movetime and movetime <= 10000:
 			self.gnuchess.setMovetime(movetime)
 			self["hint"].setText(_("New movetime: %d seconds") % (movetime/1000) )
