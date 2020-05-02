@@ -94,9 +94,9 @@ class ChessBoard(chess.Board):
 		self.WhiteBottom = True
 		self.drawCoords()
 
-		self._focusSquare = 12
-		self._isCastling = False
-		self._isEnpassant = False
+		self.focusSquare = 12
+		self.isCastling = False
+		self.isEnpassant = False
 		
 		self.pieceColor = self.boardcolor["black"]
 		self.frameColor = self.boardcolor["black"]
@@ -105,7 +105,7 @@ class ChessBoard(chess.Board):
 	def drawCoords(self):
 		if self.canvas:
 			self.canvas.fill(0, 0, 30, self.cellwidth*8+40, self.boardcolor["light"])
-			self.canvas.fill(00, 810, self.cellwidth*8+40, 30, self.boardcolor["light"])
+			self.canvas.fill(0, 810, self.cellwidth*8+40, 30, self.boardcolor["light"])
 			for coord in range(1,9):
 				if self.WhiteBottom:
 					hchar = chr(96+coord)
@@ -134,8 +134,8 @@ class ChessBoard(chess.Board):
 		anzeigen zu können. Das Board jetzt neu zeichnen
 		"""
 		move = self.parse_uci(uci)
-		self._isCastling = self.is_castling(move)
-		self._isEnpassant = self.is_en_passant(move)
+		self.isCastling = self.is_castling(move)
+		self.isEnpassant = self.is_en_passant(move)
 		self.push(move)
 		self.updateBoard(move)
 		return move
@@ -149,14 +149,14 @@ class ChessBoard(chess.Board):
 
 	def drawBoard(self):
 		if self.canvas:
-			for square in chess.SQUARES_180:
+			for square in chess.SQUARES:
 				self._drawSquare(square)
 
 	def updateBoard(self, move):
 		# Falls der letzt Zug eine Rochade oder En-Passant war,
 		# wird der Einfachheit halber das Board komplett neu
 		# gezeichnet. Ansonsten nur die beiden betroffenen Felder.
-		if self._isCastling or self._isEnpassant:
+		if self.isCastling or self.isEnpassant:
 			self.drawBoard()
 		else:
 			self._drawSquare(move.from_square)
@@ -180,7 +180,7 @@ class ChessBoard(chess.Board):
 			return self.boardcolor["light"]
 	
 	def _getFocusColor(self, square):
-		if square == self._focusSquare:
+		if square == self.focusSquare:
 			return self.boardcolor["focus"]
 		else:
 			return self._getBackgroundColor(square)
@@ -206,14 +206,20 @@ class ChessBoard(chess.Board):
 		self.canvas.flush()
 	
 	def setFocus(self, focusSquare):
-		oldFocusSquare = self._focusSquare
-		self._focusSquare = focusSquare
+		oldFocusSquare = self.focusSquare
+		self.focusSquare = focusSquare
 		self._drawSquare(oldFocusSquare)
 		self._drawSquare(focusSquare)
 	
 	def getFocus(self):
-		return self._focusSquare
+		return self.focusSquare
 
+class MemoryActionMap(ActionMap):
+	"""ActionMap that records the key pressed
+	"""
+	def action(self, contexts, action):
+		self.keyPressed = action
+		return ActionMap.action(self, contexts, action)
 
 class Board(Screen):
 
@@ -241,21 +247,21 @@ class Board(Screen):
 		Screen.__init__(self, session)
 		self.skinName = "ChessBoard"
 		
-		self["actions"] =  ActionMap(["ChessboardActions"], {
+		self["actions"] =  MemoryActionMap(["ChessboardActions"], {
 			"cancel":		self.cancel,
-			"up":			self.moveUp,
-			"down":			self.moveDown,
-			"left":			self.moveLeft,
-			"right":		self.moveRight,
-			"1":			self.moveUpLeft,
-			"2":			self.moveUp,
-			"3":			self.moveUpRight,
-			"4":			self.moveLeft,
+			"up":			self.moveFocus,
+			"down":			self.moveFocus,
+			"left":			self.moveFocus,
+			"right":		self.moveFocus,
+			"1":			self.moveFocus,
+			"2":			self.moveFocus,
+			"3":			self.moveFocus,
+			"4":			self.moveFocus,
+			"6":			self.moveFocus,
+			"7":			self.moveFocus,
+			"8":			self.moveFocus,
+			"9":			self.moveFocus,
 			"5":			self.selectSquare,
-			"6":			self.moveRight,
-			"7":			self.moveDownLeft,
-			"8":			self.moveDown,
-			"9":			self.moveDownRight,
 			"ok":			self.selectSquare,
 			"red":			self.red,
 			"green":		self.green,
@@ -492,105 +498,37 @@ class Board(Screen):
 	def cancel(self):
 		self.gnuchess.quit()
 		self.close()
-	
-	# ---- Logische Feld-Bewegung ---- #
-	def moveUp(self):
+
+	# An dieser Stelle auswerten, wohin das Focus-Feld verschoben werden soll.
+	# Spart so ca. 70 Zeilen Code.
+	def moveFocus(self):
+		key = self["actions"].keyPressed
+		
+		# Map, welche Taste das Focus-Feld wohin verschiebt.
+		movesWhite = { "1":  7,             "2":  8, "up":    8, "3": 9,
+					   "4": -1, "left": -1,                      "right": 1, "6": 1,
+					   "7": -9,             "8": -8, "down": -8, "9": -7 }
+		movesBlack = { "1": -7,             "2": -8, "up":   -8, "3": -9,
+					   "4":  1, "left": 1,                       "right": -1, "6": -1,
+					   "7":  9,             "8":  8, "down":  8, "9": 7 }
+		
+		fOld = fNew = self.board.getFocus()
 		if self.whiteBottom:
-			self.realMoveUp()
+			dist = movesWhite[key]
+			fNew += dist
 		else:
-			self.realMoveDown()
-
-	def moveUpLeft(self):
-		if self.whiteBottom:
-			self.realMoveUpLeft()
+			dist = movesBlack[key]
+			fNew += dist
+		
+		# Sicherstellen, dass nicht über den Brettrand bewegt werden kann.
+		# "mod" ist der Zeilen-Abstand zwischen altem und neuem Feld.
+		if abs(dist) > 1:
+			mod = (lambda x: (1, -1)[x<0])(dist)
 		else:
-			self.realMoveDownRight()
-
-	def moveUpRight(self):
-		if self.whiteBottom:
-			self.realMoveUpRight()
-		else:
-			self.realMoveDownLeft()
-
-	def moveLeft(self):
-		if self.whiteBottom:
-			self.realMoveLeft()
-		else:
-			self.realMoveRight()
-
-	def moveRight(self):
-		if self.whiteBottom:
-			self.realMoveRight()
-		else:
-			self.realMoveLeft()
-
-	def moveDown(self):
-		if self.whiteBottom:
-			self.realMoveDown()
-		else:
-			self.realMoveUp()
-
-	def moveDownLeft(self):
-		if self.whiteBottom:
-			self.realMoveDownLeft()
-		else:
-			self.realMoveUpRight()
-	
-	def moveDownRight(self):
-		if self.whiteBottom:
-			self.realMoveDownRight()
-		else:
-			self.realMoveUpLeft()
-
-	# ---- umgesetzt je nachdem ob Weiß oder Schwarz oben ist ---- #
-	# Focus-Feld bewegen
-	def realMoveUp(self):
-		cellWithFocus = self.board.getFocus() + 8
-		if cellWithFocus < 64:
-			self.board.setFocus(cellWithFocus)
-
-	def realMoveUpLeft(self):
-		cellWithFocus = self.board.getFocus()
-		if cellWithFocus % 8 > 0:
-			cellWithFocus += 7
-			if cellWithFocus < 64:
-				self.board.setFocus(cellWithFocus)
-
-	def realMoveUpRight(self):
-		cellWithFocus = self.board.getFocus()
-		if cellWithFocus % 8 < 7:
-			cellWithFocus += 9
-			if cellWithFocus < 64:
-				self.board.setFocus(cellWithFocus)
-
-	def realMoveLeft(self):
-		if self.board.getFocus() % 8 > 0:
-			cellWithFocus = self.board.getFocus() - 1
-			self.board.setFocus(cellWithFocus)
-
-	def realMoveRight(self):
-		if self.board.getFocus() % 8 < 7:
-			cellWithFocus = self.board.getFocus() + 1
-			self.board.setFocus(cellWithFocus)
-
-	def realMoveDown(self):
-		cellWithFocus = self.board.getFocus() - 8
-		if cellWithFocus >= 0:
-			self.board.setFocus(cellWithFocus)
-
-	def realMoveDownLeft(self):
-		cellWithFocus = self.board.getFocus()
-		if cellWithFocus % 8 > 0:
-			cellWithFocus -= 9
-			if cellWithFocus >= 0:
-				self.board.setFocus(cellWithFocus)
-	
-	def realMoveDownRight(self):
-		cellWithFocus = self.board.getFocus()
-		if self.board.getFocus() % 8 < 7:
-			cellWithFocus -= 7
-			if cellWithFocus >= 0:
-				self.board.setFocus(cellWithFocus)
+			mod = 0
+		
+		if fNew >= 0 and fNew <= 63 and  fOld / 8 + mod == fNew / 8:
+			self.board.setFocus(fNew)
 
 	# Spielstärke / Bedenkzeit setzen
 	def increaseMovetime(self):
