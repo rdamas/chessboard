@@ -13,6 +13,7 @@ from __init__ import _
 
 import chess
 import chess.uci
+import chess.polyglot
 
 class ChessEngine(object):
 	
@@ -22,17 +23,22 @@ class ChessEngine(object):
 	
 		if engine == 'gnuchess':
 			self.engine = chess.uci.popen_engine([ "/usr/bin/gnuchess", "-u"] )
-			self.engine.uci()
-			self.engine.setoption({ "BookFile": "smallbook.bin" })
 		elif engine == 'stockfish':
 			self.engine = chess.uci.popen_engine("/usr/bin/stockfish")
 		else:
 			raise Exception("Unknown chess engine")
 			
+		self.engine.uci()
 		self.engine.isready()
 		self.engine.ucinewgame()
 		
 		self.movetime = 1000
+		
+		try:
+			self.book = chess.polyglot.open_reader("/usr/share/gnuchess/smallbook.bin")
+			self.useBook = True
+		except:
+			self.useBook = False
 		
 	def quit(self):
 		try:
@@ -51,6 +57,14 @@ class ChessEngine(object):
 		self.callback(bestmove, ponder)
 		
 	def doMove(self, board):
+		if self.useBook:
+			try:
+				entry = self.book.weighted_choice(board)
+				self.callback(entry.move().uci(), None)
+				return
+			except:
+				self.useBook = False
+				self.book.close()
 		self.engine.position(board)
 		future = self.engine.go(movetime=self.movetime, async_callback=self.received)
 	
