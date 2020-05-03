@@ -2,6 +2,8 @@
 
 from enigma import gFont, RT_HALIGN_CENTER, RT_VALIGN_CENTER
 from Components.ActionMap import ActionMap
+from Components.config import *
+from Components.ConfigList import ConfigList, ConfigListScreen
 from Components.Label import Label
 from Components.Sources.CanvasSource import CanvasSource   
 from Components.Sources.StaticText import StaticText   
@@ -12,15 +14,21 @@ from __init__ import _
 import chess
 import chess.uci
 
-class Gnuchess(object):
+class ChessEngine(object):
 	
-	def __init__(self, callback):
+	def __init__(self, callback, engine):
 		
 		self.callback = callback
 	
-		self.engine = chess.uci.popen_engine([ "/usr/bin/gnuchess", "-u"] )
-		self.engine.uci()
-		self.engine.setoption({ "BookFile": "smallbook.bin" })
+		if engine == 'gnuchess':
+			self.engine = chess.uci.popen_engine([ "/usr/bin/gnuchess", "-u"] )
+			self.engine.uci()
+			self.engine.setoption({ "BookFile": "smallbook.bin" })
+		elif engine == 'stockfish':
+			self.engine = chess.uci.popen_engine("/usr/bin/stockfish")
+		else:
+			raise Exception("Unknown chess engine")
+			
 		self.engine.isready()
 		self.engine.ucinewgame()
 		
@@ -204,6 +212,49 @@ class MemoryActionMap(ActionMap):
 		self.keyPressed = action
 		return ActionMap.action(self, contexts, action)
 
+class ChessboardConfigScreen(Screen, ConfigListScreen):
+	def __init__(self, session):
+		Screen.__init__(self, session)
+		self.skinName = [ "ChessboardConfigScreen", "Setup" ]
+		self.setup_title = _("Chessboard Setup")
+
+		self.onChangedEntry = [ ]
+		self.list = [ ]
+		ConfigListScreen.__init__(self, self.list, session = session, on_change = self.changedEntry)
+
+		self["actions"] = ActionMap(["ChessboardActions"], {
+				"cancel": self.cancel,
+				"ok":     self.save,
+				"red":    self.cancel,
+				"green":  self.save,
+			}, -2)
+
+		self["key_green"] = StaticText(_("OK"))
+		self["key_red"] = StaticText(_("Cancel"))
+
+		self.list = []
+		self.createConfigList()	
+
+	def createConfigList(self):
+		self.list = []
+		self.list.append(getConfigListEntry(_("Chess engine:"), config.plugins.chessboard.chessengine))
+		self["config"].list = self.list
+		self["config"].setList(self.list)
+
+	def changedEntry(self):
+		for x in self.onChangedEntry:
+			x()
+
+	def save(self):
+		for x in self["config"].list:
+			x[1].save()
+		configfile.save()
+		self.close()
+	
+	def cancel(self):
+		self.close()
+	
+
 class Board(Screen):
 
 	skin = """
@@ -252,6 +303,7 @@ class Board(Screen):
 			"blue":			self.blue,
 			"nextBouquet":	self.changeMovetime,
 			"prevBouquet":	self.changeMovetime,
+			"menu":			self.menu,
 		}, -1)
 		
 		self["Canvas"] = CanvasSource()
@@ -267,18 +319,18 @@ class Board(Screen):
 		self["key_red"] = Label(_("Undo move"))
 		self["key_green"] = Label(_("Suggest move"))
 		self["key_yellow"] = Label(_("Rotate board"))
-		self["key_blue"] = Label(_("Play black"))
+		self["key_blue"] = Label()
+		self["player_black"] = Label()
+		self["player_white"] = Label()
 		
-		self["player_black"] = Label(_("Gnuchess"))
-		self["player_white"] = Label(_("Player"))
-		
-		self.gnuchess = Gnuchess(self.receiveAnswer)
+		self.configChessEngine = config.plugins.chessboard.chessengine.value
+		self.chessengine = ChessEngine(self.receiveAnswer, self.configChessEngine)
 		self.move  = []
 		
 		self.isWhite = True
 		self.isGameOver = False
 		self.flagUndoMove = False
-		self.waitForGnuchess = False
+		self.waitForChessEngine = False
 		self.ponderMove = None
 		self.whiteBottom = True
 		
@@ -287,8 +339,21 @@ class Board(Screen):
 	def setupBoard(self):
 		self["Canvas"].fill(0,0,840,840, argb(33,255,255,255))
 		self.board = ChessBoard(canvas=self["Canvas"])
+		self.drawPlayerLabel()
 		self.board.drawBoard()
-
+	
+	def drawPlayerLabel(self):
+		if self.isWhite:
+			self["player_black"].setText(_(self.configChessEngine.title()))
+			self["player_white"].setText(_("Player"))
+			self["key_blue"].setText(_("Play black"))
+			self.board.setFocus(12)
+		else:
+			self["player_black"].setText(_("Player"))
+			self["player_white"].setText(_(self.configChessEngine.title()))
+			self["key_blue"].setText(_("Play white"))
+			self.board.setFocus(52)
+		
 	def getMoveUci(self):
 		"""
 		Return the two saved moves from self.move[] to UCI notation
@@ -335,19 +400,19 @@ class Board(Screen):
 			elif self.board.is_check():
 				self["curr_move"].setText(_("Chess"))
 			self["hint"].setText("")
-			self.gnuchess.doMove(self.board)
-			self.waitForGnuchess = True
+			self.chessengine.doMove(self.board)
+			self.waitForChessEngine = True
 		except ValueError as e:
 			self["curr_move"].setText(_("illegal move"))
 	
 	def receiveAnswer(self, bestmove, ponder):
 		"""
-		Callback with answer from gnuchess.
-		In UCI mode gnuchess returns a "bestmove" and a "ponder", which is the
-		move gnuchess regards as best answer. This move is saved as "hint" and
+		Callback with answer from chess engine.
+		In UCI mode chess engine returns a "bestmove" and a "ponder", which is the
+		move chess engine regards as best answer. This move is saved as "hint" and
 		can be displayed by pressing the green key.
 		"""
-		self.waitForGnuchess = False
+		self.waitForChessEngine = False
 		self.board.push_uci(bestmove)
 		if self.flagUndoMove:
 			self.undoMove()
@@ -435,7 +500,7 @@ class Board(Screen):
 		self.isGameOver = False
 
 	def red(self):
-		if self.waitForGnuchess:
+		if self.waitForChessEngine:
 			self["hint"].setText(_("Move will be undone"))
 			self.flagUndoMove = True
 		else:
@@ -459,26 +524,16 @@ class Board(Screen):
 		if self.isGameOver:
 			return
 		try:
-			self.gnuchess.doMove(self.board)
+			self.isWhite = not self.isWhite
+			self.chessengine.doMove(self.board)
 			self["hint"].setText("")
-			if self.isWhite:
-				self.isWhite = False
-				self["player_black"].setText(_("Player"))
-				self["player_white"].setText(_("Gnuchess"))
-				self["key_blue"].setText(_("Play white"))
-				self.board.setFocus(52)
-			else:
-				self.isWhite = True
-				self["player_black"].setText(_("Gnuchess"))
-				self["player_white"].setText(_("Player"))
-				self["key_blue"].setText(_("Play black"))
-				self.board.setFocus(12)
+			self.drawPlayerLabel()
 		except:
 			pass
 
-	# before closing the plugin, gnuchess needs to be terminated
+	# before closing the plugin, chess engine needs to be terminated
 	def cancel(self):
-		self.gnuchess.quit()
+		self.chessengine.quit()
 		self.close()
 
 	# move the focus field
@@ -511,11 +566,36 @@ class Board(Screen):
 		if fNew >= 0 and fNew <= 63 and  fOld / 8 + mod == fNew / 8:
 			self.board.setFocus(fNew)
 
-	# change time gnuchess is allowed to compute its next move
+	# change time chess engine is allowed to compute its next move
 	def changeMovetime(self):
 		key = self["actions"].keyPressed
 		amount = { "nextBouquet": 1000, "prevBouquet": -1000 }[key]
-		movetime = self.gnuchess.getMovetime() + amount
+		movetime = self.chessengine.getMovetime() + amount
 		if 1000 <= movetime and movetime <= 10000:
-			self.gnuchess.setMovetime(movetime)
+			self.chessengine.setMovetime(movetime)
 			self["hint"].setText(_("New movetime: %d seconds") % (movetime/1000) )
+	
+	def menu(self):
+		self.session.openWithCallback(self.menuCallback, ChessboardConfigScreen)
+	
+	def menuCallback(self):
+		if self.configChessEngine != config.plugins.chessboard.chessengine.value:
+			self.configChessEngine = config.plugins.chessboard.chessengine.value
+			self.chessengine.quit()
+			
+			self.chessengine = ChessEngine(self.receiveAnswer, self.configChessEngine)
+			self.move  = []
+			
+			self.isWhite = True
+			self.isGameOver = False
+			self.flagUndoMove = False
+			self.waitForChessEngine = False
+			self.ponderMove = None
+			self.whiteBottom = True
+			
+			self.board.set_fen(chess.STARTING_FEN)
+			self.board.drawBoard()
+			self.drawPlayerLabel()
+			
+			for i in [0,1,2,3]:
+				self["message%d" % i].setText("")

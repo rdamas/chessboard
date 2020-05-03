@@ -54,7 +54,7 @@ msgstr "Schach"
 
 #: ChessBoard.py:342
 msgid "illegal move"
-msgstr "Zug nicht möglich"
+msgstr "Illegaler Zug"
 
 #: ChessBoard.py:405
 msgid "Queen"

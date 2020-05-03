@@ -25,9 +25,20 @@
 #
 #######################################################################M
 
+from Components.config import *
 from Plugins.Plugin import PluginDescriptor
 from __init__ import _, isDebug
 import ChessBoard
+import os
+
+engines = []
+for item in [("gnuchess", "Gnuchess"),("stockfish", "Stockfish")]:
+	fpath = "/usr/bin/%s" % (item[0])
+	if os.path.isfile(fpath) and os.access(fpath, os.X_OK):
+		engines.append(item)
+
+config.plugins.chessboard = ConfigSubsection()
+config.plugins.chessboard.chessengine = ConfigSelection(default="gnuchess", choices = engines)
 
 def main(session, **kwargs):
 	if isDebug():
