@@ -9,6 +9,7 @@ from Components.Sources.CanvasSource import CanvasSource
 from Components.Sources.StaticText import StaticText   
 from Screens.Screen import Screen
 from Screens.ChoiceBox import ChoiceBox
+from Screens.FileDirBrowser import FileDirBrowser
 from __init__ import _
 
 import chess
@@ -17,7 +18,7 @@ import chess.polyglot
 
 class ChessEngine(object):
 	
-	def __init__(self, callback, engine):
+	def __init__(self, callback, engine, usebook, book):
 		
 		self.callback = callback
 	
@@ -33,12 +34,13 @@ class ChessEngine(object):
 		self.engine.ucinewgame()
 		
 		self.movetime = 1000
-		
-		try:
-			self.book = chess.polyglot.open_reader("/usr/share/gnuchess/smallbook.bin")
-			self.useBook = True
-		except:
-			self.useBook = False
+
+		self.useBook = usebook		
+		if self.useBook:
+			try:
+				self.book = chess.polyglot.open_reader(book)
+			except:
+				self.useBook = False
 		
 	def quit(self):
 		try:
@@ -228,6 +230,7 @@ class MemoryActionMap(ActionMap):
 
 class ChessboardConfigScreen(Screen, ConfigListScreen):
 	def __init__(self, session):
+		self.session = session
 		Screen.__init__(self, session)
 		self.skinName = [ "ChessboardConfigScreen", "Setup" ]
 		self.setup_title = _("Chessboard Setup")
@@ -252,6 +255,8 @@ class ChessboardConfigScreen(Screen, ConfigListScreen):
 	def createConfigList(self):
 		self.list = []
 		self.list.append(getConfigListEntry(_("Chess engine:"), config.plugins.chessboard.chessengine))
+		self.list.append(getConfigListEntry(_("Use Opening Book:"), config.plugins.chessboard.usebook))
+		self.list.append(getConfigListEntry(_("Opening Book:"), config.plugins.chessboard.book))
 		self["config"].list = self.list
 		self["config"].setList(self.list)
 
@@ -263,11 +268,25 @@ class ChessboardConfigScreen(Screen, ConfigListScreen):
 		for x in self["config"].list:
 			x[1].save()
 		configfile.save()
-		self.close()
+		self.close(True)
 	
 	def cancel(self):
-		self.close()
+		for x in self["config"].list:
+			x[1].cancel()
+		self.close(False)
 	
+	def handleInputHelpers(self):
+		cfg = self["config"].getCurrent()
+		if cfg[0] == _("Opening Book:"):
+			self.session.openWithCallback(self.fileChosen, FileDirBrowser, getFile=True,
+										  getDir=False, initDir="/usr/share/gnuchess/")
+			return 
+		return ConfigListScreen.handleInputHelpers(self)
+	
+	def fileChosen(self, filename):
+		if filename:
+			self["config"].getCurrent()[1].setValue(filename)
+			self["config"].invalidate(self["config"].getCurrent())
 
 class Board(Screen):
 
@@ -337,8 +356,10 @@ class Board(Screen):
 		self["player_black"] = Label()
 		self["player_white"] = Label()
 		
-		self.configChessEngine = config.plugins.chessboard.chessengine.value
-		self.chessengine = ChessEngine(self.receiveAnswer, self.configChessEngine)
+		self.chessengine = ChessEngine(callback=self.receiveAnswer,
+									   engine=config.plugins.chessboard.chessengine.value,
+									   usebook=config.plugins.chessboard.usebook.value,
+									   book=config.plugins.chessboard.book.value)
 		self.move  = []
 		
 		self.isWhite = True
@@ -358,13 +379,13 @@ class Board(Screen):
 	
 	def drawPlayerLabel(self):
 		if self.isWhite:
-			self["player_black"].setText(_(self.configChessEngine.title()))
+			self["player_black"].setText(_(config.plugins.chessboard.chessengine.value.title()))
 			self["player_white"].setText(_("Player"))
 			self["key_blue"].setText(_("Play black"))
 			self.board.setFocus(12)
 		else:
 			self["player_black"].setText(_("Player"))
-			self["player_white"].setText(_(self.configChessEngine.title()))
+			self["player_white"].setText(_(config.plugins.chessboard.chessengine.value.title()))
 			self["key_blue"].setText(_("Play white"))
 			self.board.setFocus(52)
 		
@@ -592,12 +613,14 @@ class Board(Screen):
 	def menu(self):
 		self.session.openWithCallback(self.menuCallback, ChessboardConfigScreen)
 	
-	def menuCallback(self):
-		if self.configChessEngine != config.plugins.chessboard.chessengine.value:
-			self.configChessEngine = config.plugins.chessboard.chessengine.value
+	def menuCallback(self, configChanged):
+		if configChanged:
 			self.chessengine.quit()
 			
-			self.chessengine = ChessEngine(self.receiveAnswer, self.configChessEngine)
+			self.chessengine = ChessEngine(callback=self.receiveAnswer,
+											engine=config.plugins.chessboard.chessengine.value,
+											usebook=config.plugins.chessboard.usebook.value,
+											book=config.plugins.chessboard.book.value)
 			self.move  = []
 			
 			self.isWhite = True

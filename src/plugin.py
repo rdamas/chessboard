@@ -39,6 +39,8 @@ for item in [("gnuchess", "Gnuchess"),("stockfish", "Stockfish")]:
 
 config.plugins.chessboard = ConfigSubsection()
 config.plugins.chessboard.chessengine = ConfigSelection(default="gnuchess", choices = engines)
+config.plugins.chessboard.usebook = ConfigEnableDisable(True)
+config.plugins.chessboard.book = ConfigText(default="/usr/share/gnuchess/smallbook.bin")
 
 def main(session, **kwargs):
 	if isDebug():
