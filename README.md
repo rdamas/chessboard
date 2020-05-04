@@ -18,6 +18,7 @@ This plugin is a frontend to let you play a game of chess against your Enigma2 b
 * yellow key rotates the board
 * green key shows the move that gnuchess is expecting
 * red key undos moves
+* menu key opens settings menu; if installed you may use stockfish as chess engine
 
 ## Ideas
 * Spielzeit/Uhr als Alternative zur Spielstärke
