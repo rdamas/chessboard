@@ -94,6 +94,18 @@ msgstr ""
 msgid "New movetime: %d seconds"
 msgstr ""
 
+#: ChessBoard.py:257
+msgid "Chess engine:"
+msgstr ""
+
+#: ChessBoard.py:258
+msgid "Use Opening Book:"
+msgstr ""
+
+#: ChessBoard.py:259
+msgid "Opening Book"
+msgstr ""
+
 #: plugin.py
 #, python-format
 msgid "Gnuchess Frontend"
