@@ -4,7 +4,7 @@ This plugin is a frontend to let you play a game of chess against your Enigma2 b
 
 ## Requirements:
 * a full HD skin
-* gnuchess-6 (https://www.gnu.org/software/chess/)
+* gnuchess-6 (https://www.gnu.org/software/chess/) or stockfish (https://github.com/official-stockfish/Stockfish)
 * python-chess-0.23.11 (last supported version for python-2, https://github.com/niklasf/python-chess/releases/tag/v0.23.11)
 
 ![image](https://user-images.githubusercontent.com/15088943/80862960-3e289580-8c79-11ea-97f3-9ce8b053700f.png)
