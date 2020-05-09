@@ -17,6 +17,13 @@ import chess.uci
 import chess.polyglot
 
 class ChessEngine(object):
+	"""
+	Communication layer
+	The communication with the chess engine is handled by the chess.uci class.
+	This class handles the communication of this plugin with chess.uci.
+	It is responsible for engine setup, sending moves to chess.uci 
+	and returning the answers back to the plugin's main class.
+	"""
 	
 	def __init__(self, callback, engine, usebook, book):
 		
@@ -28,7 +35,8 @@ class ChessEngine(object):
 			self.engine = chess.uci.popen_engine("/usr/bin/stockfish")
 		else:
 			raise Exception("Unknown chess engine")
-			
+		
+		# mandatory commands for starting a game in uci mode:
 		self.engine.uci()
 		self.engine.isready()
 		self.engine.ucinewgame()
@@ -49,6 +57,10 @@ class ChessEngine(object):
 			pass
 	
 	def received(self, future):
+		"""
+		Callback function that receives the answer from the chess engine.
+		This function in turn calls the callback from the main class
+		"""
 		result = future.result()
 		bestmove = None
 		ponder = None
@@ -59,6 +71,10 @@ class ChessEngine(object):
 		self.callback(bestmove, ponder)
 		
 	def doMove(self, board):
+		"""
+		Sends a player move to the chess engine.
+		If an opening book is used, first try to find a move from the book.
+		"""
 		if self.useBook:
 			try:
 				entry = self.book.weighted_choice(board)
@@ -84,6 +100,12 @@ def argb(a,r,g,b):
 	return (a<<24)|(r<<16)|(g<<8)|b
 
 class ChessBoard(chess.Board):
+	"""
+	Extension to chess.Board to draw the state of a game.
+	chess.Board stores the state and has methods to set up a board
+	and information about castlings and en passant moves, so that we
+	don't need to track ourselves.
+	"""
 	boardcolor = { 
 		"black": argb(0x00, 0x00, 0x00, 0x00), 
 		"dark":  argb(0x00, 0xd9, 0xd9, 0xc5), 
@@ -160,9 +182,11 @@ class ChessBoard(chess.Board):
 				self._drawSquare(square)
 
 	def updateBoard(self, move):
-		# if the last move was a castling or en passant move,
-		# simply redraw the whole board instead of the fields
-		# changed
+		"""
+		if the last move was a castling or en passant move,
+		simply redraw the whole board instead of the fields
+		involved in the last move
+		"""
 		if self.isCastling or self.isEnpassant:
 			self.drawBoard()
 		else:
@@ -213,6 +237,9 @@ class ChessBoard(chess.Board):
 		self.canvas.flush()
 	
 	def setFocus(self, focusSquare):
+		"""
+		redraw the old and new focus field.
+		"""
 		oldFocusSquare = self.focusSquare
 		self.focusSquare = focusSquare
 		self._drawSquare(oldFocusSquare)
@@ -222,7 +249,8 @@ class ChessBoard(chess.Board):
 		return self.focusSquare
 
 class MemoryActionMap(ActionMap):
-	"""ActionMap that records the key pressed
+	"""
+	ActionMap that records the key pressed
 	"""
 	def action(self, contexts, action):
 		self.keyPressed = action
@@ -297,7 +325,7 @@ class Board(Screen):
 			<widget name="player_white" position="60,90" size="400,40" font="Regular;30" valign="center" halign="center" backgroundColor="#00ffffff" foregroundColor="#00000000" />
 			<widget name="curr_move" position="880,100" size="350,50" font="Console;35"/>
 			<widget name="hint" position="1250,100" size="650,50" font="Console;35"/>
-			<widget name="message0" position="860,175" size="260,800" font="Console;30"/>
+			<widget name="message0" position="880,175" size="260,800" font="Console;30"/>
 			<widget name="message1" position="1140,175" size="260,800" font="Console;30"/>
 			<widget name="message2" position="1400,175" size="260,800" font="Console;30"/>
 			<widget name="message3" position="1660,175" size="260,800" font="Console;30"/>
@@ -312,7 +340,7 @@ class Board(Screen):
 		
 		self.session = session
 		Screen.__init__(self, session)
-		self.skinName = "ChessBoard"
+		self.skinName = "ChessBoard_v2"
 		
 		self["actions"] =  MemoryActionMap(["ChessboardActions"], {
 			"cancel":		self.cancel,
@@ -470,9 +498,9 @@ class Board(Screen):
 		Always only write the last column...
 		"""
 		moves = ""
-		column = (len(self.board.move_stack) - 1) / 40
+		column = (len(self.board.move_stack) - 1) / 48
 		column = max(0,min(3,column))
-		startpos = column * 40
+		startpos = column * 48
 		
 		for num, move in enumerate(self.board.move_stack[startpos:]):
 			if num % 2 == 0:
@@ -591,7 +619,7 @@ class Board(Screen):
 			dist = movesBlack[key]
 			fNew += dist
 		
-		# we won't move across the board margin,
+		# we won't move across the board margins,
 		# "mod" is the allowed distance between columns
 		if abs(dist) > 1:
 			mod = (lambda x: (1, -1)[x<0])(dist)
@@ -614,6 +642,11 @@ class Board(Screen):
 		self.session.openWithCallback(self.menuCallback, ChessboardConfigScreen)
 	
 	def menuCallback(self, configChanged):
+		"""
+		Callback from configuration menu.
+		If the configuration has changed, we start a new game, because the engine
+		options have changed.
+		"""
 		if configChanged:
 			self.chessengine.quit()
 			
